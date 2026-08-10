@@ -18,7 +18,7 @@
 - Every message read/write checks room membership. No public user directory.
 - Env vars: `PORT` (default 3000), `SESSION_SECRET` (default `dev-only-secret`), `DB_PATH` (default `data.db`).
 - No TypeScript, no build step, no frontend frameworks. CommonJS (`require`) throughout.
-- Run tests with `npm test` (which runs `node --test tests/`).
+- Run tests with `npm test` (which runs `node --test` — no path argument; Node auto-discovers `tests/**`).
 
 ---
 
@@ -40,7 +40,7 @@
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test tests/"
+    "test": "node --test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
