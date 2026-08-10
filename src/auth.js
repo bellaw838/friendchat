@@ -24,7 +24,13 @@ function authRoutes(db) {
     if (db.getUserByUsername(username)) {
       return res.status(409).json({ error: 'That username is taken' });
     }
-    const user = db.createUser(username, bcrypt.hashSync(password, 10));
+    let user;
+    try {
+      user = db.createUser(username, bcrypt.hashSync(password, 10));
+    } catch {
+      // unique-constraint race: two signups for the same name at once
+      return res.status(409).json({ error: 'That username is taken' });
+    }
     req.session.userId = user.id;
     req.session.username = user.username;
     res.json({ id: user.id, username: user.username });
