@@ -4,6 +4,7 @@ const express = require('express');
 const session = require('express-session');
 const { createDb } = require('./db');
 const { authRoutes } = require('./auth');
+const { roomRoutes } = require('./rooms');
 
 function createServer({ dbFile } = {}) {
   const db = createDb(dbFile);
@@ -21,6 +22,7 @@ function createServer({ dbFile } = {}) {
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use(authRoutes(db));
+  app.use(roomRoutes(db));
 
   const httpServer = http.createServer(app);
   return { app, httpServer, db, sessionMiddleware };
