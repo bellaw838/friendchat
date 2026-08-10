@@ -45,6 +45,59 @@ function createDb(filename = process.env.DB_PATH || 'data.db') {
     getUserByUsername(username) {
       return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
     },
+    createRoom({ name = null, code = null, isDirect = false } = {}) {
+      const info = db
+        .prepare('INSERT INTO rooms (name, code, is_direct) VALUES (?, ?, ?)')
+        .run(name, code, isDirect ? 1 : 0);
+      return db.prepare('SELECT * FROM rooms WHERE id = ?').get(info.lastInsertRowid);
+    },
+    getRoomByCode(code) {
+      return db.prepare('SELECT * FROM rooms WHERE code = ?').get(code);
+    },
+    addMember(roomId, userId) {
+      db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)').run(roomId, userId);
+    },
+    isMember(roomId, userId) {
+      return !!db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, userId);
+    },
+    findDirectRoom(userIdA, userIdB) {
+      return db.prepare(`
+        SELECT r.* FROM rooms r
+        JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ?
+        JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = ?
+        WHERE r.is_direct = 1
+      `).get(userIdA, userIdB);
+    },
+    listRoomsForUser(userId) {
+      return db.prepare(`
+        SELECT r.id, r.name, r.code, r.is_direct,
+          (SELECT u.username FROM room_members m JOIN users u ON u.id = m.user_id
+             WHERE m.room_id = r.id AND m.user_id != ? LIMIT 1) AS other_username,
+          (SELECT m2.user_id FROM room_members m2
+             WHERE m2.room_id = r.id AND m2.user_id != ? LIMIT 1) AS other_user_id
+        FROM rooms r JOIN room_members rm ON rm.room_id = r.id
+        WHERE rm.user_id = ?
+        ORDER BY r.id DESC
+      `).all(userId, userId, userId);
+    },
+    createMessage({ roomId, senderId, kind, body }) {
+      const info = db
+        .prepare('INSERT INTO messages (room_id, sender_id, kind, body) VALUES (?, ?, ?, ?)')
+        .run(roomId, senderId, kind, body);
+      return db.prepare(`
+        SELECT m.*, u.username AS sender_username
+        FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?
+      `).get(info.lastInsertRowid);
+    },
+    listMessages(roomId, limit = 50) {
+      return db.prepare(`
+        SELECT * FROM (
+          SELECT m.*, u.username AS sender_username
+          FROM messages m JOIN users u ON u.id = m.sender_id
+          WHERE m.room_id = ? ORDER BY m.id DESC LIMIT ?
+        ) ORDER BY id ASC
+      `).all(roomId, limit);
+    },
   };
 }
 
