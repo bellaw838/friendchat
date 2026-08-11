@@ -741,6 +741,7 @@ test('real-time message delivery between two users', async () => {
   } finally {
     sockA.close();
     sockB.close();
+    httpServer.closeAllConnections?.(); // idle polling keep-alives otherwise block close
     await new Promise((r) => httpServer.close(r));
   }
 });
@@ -755,6 +756,7 @@ test('unauthenticated sockets are rejected', async () => {
     assert.ok(true);
   } finally {
     sock.close();
+    httpServer.closeAllConnections?.(); // idle polling keep-alives otherwise block close
     await new Promise((r) => httpServer.close(r));
   }
 });
