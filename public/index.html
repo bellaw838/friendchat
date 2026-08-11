@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BellaChat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="conn-banner" class="hidden">connecting…</div>
+
+  <div id="screen-auth" class="screen">
+    <h1>💬 BellaChat</h1>
+    <form id="auth-form" class="card">
+      <input id="auth-username" placeholder="username" autocomplete="username" maxlength="20" required>
+      <input id="auth-password" type="password" placeholder="password (8+ characters)" autocomplete="current-password" required>
+      <p id="auth-error" class="error"></p>
+      <button type="submit">Log in</button>
+      <button type="button" id="btn-signup" class="secondary">Sign up</button>
+    </form>
+  </div>
+
+  <div id="screen-home" class="screen hidden">
+    <header>
+      <h1>💬 BellaChat</h1>
+      <div><b id="home-me"></b> <button id="btn-logout" class="secondary">Log out</button></div>
+    </header>
+    <p id="home-error" class="error"></p>
+    <section class="card">
+      <h2>Friends</h2>
+      <ul id="list-directs" class="chat-list"></ul>
+      <form id="form-new-direct" class="row">
+        <input id="new-direct-username" placeholder="friend's exact username" maxlength="20">
+        <button>Chat</button>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Rooms</h2>
+      <ul id="list-rooms" class="chat-list"></ul>
+      <form id="form-new-room" class="row">
+        <input id="new-room-name" placeholder="new room name" maxlength="40">
+        <button>Create</button>
+      </form>
+      <form id="form-join-room" class="row">
+        <input id="join-room-code" placeholder="room code (e.g. X7K2PQ)" maxlength="6">
+        <button>Join</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="screen-chat" class="screen hidden">
+    <header>
+      <button id="btn-back" class="secondary">←</button>
+      <h2 id="chat-title"></h2>
+      <span id="chat-code" class="muted"></span>
+    </header>
+    <div id="messages"></div>
+    <div id="emoji-picker" class="hidden"></div>
+    <form id="form-send" class="row">
+      <button type="button" id="btn-emoji" class="secondary">😊</button>
+      <label id="btn-image" class="secondary button-like">🖼️<input type="file" id="image-input" accept="image/*" hidden></label>
+      <input id="message-input" placeholder="Type a message…" autocomplete="off" maxlength="2000">
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
