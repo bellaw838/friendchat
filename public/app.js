@@ -271,6 +271,10 @@ function connectSocket() {
     if (isOnline) online.add(userId); else online.delete(userId);
     renderChats();
   });
+  socket.on('chat_added', () => {
+    socket.emit('sync_rooms');
+    loadChats();
+  });
   socket.on('new_message', (m) => {
     if (m.temp_id && pending.has(m.temp_id)) {
       pending.get(m.temp_id).remove(); // replace optimistic bubble with the real one

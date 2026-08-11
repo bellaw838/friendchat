@@ -17,6 +17,8 @@ function attachSocket(httpServer, sessionMiddleware, db) {
       return;
     }
 
+    socket.join('user:' + userId);
+
     online.set(userId, (online.get(userId) || 0) + 1);
     if (online.get(userId) === 1) io.emit('presence', { userId, online: true });
     socket.emit('online_list', [...online.keys()]);

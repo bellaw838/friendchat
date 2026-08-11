@@ -17,16 +17,16 @@ function createServer({ dbFile } = {}) {
     secret: process.env.SESSION_SECRET || 'dev-only-secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 3600 * 1000 },
+    cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', maxAge: 30 * 24 * 3600 * 1000 },
   });
   app.use(sessionMiddleware);
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use(authRoutes(db));
-  app.use(roomRoutes(db));
 
   const httpServer = http.createServer(app);
-  attachSocket(httpServer, sessionMiddleware, db);
+  const io = attachSocket(httpServer, sessionMiddleware, db);
+  app.use(roomRoutes(db, io));
   return { app, httpServer, db, sessionMiddleware };
 }
 

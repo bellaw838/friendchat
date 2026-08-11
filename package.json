@@ -2,6 +2,9 @@
   "name": "bellachat",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17"
+  },
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test"

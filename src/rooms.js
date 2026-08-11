@@ -11,7 +11,7 @@ function makeCode() {
   return code;
 }
 
-function roomRoutes(db) {
+function roomRoutes(db, io) {
   const router = express.Router();
   router.use('/api', requireLogin);
 
@@ -51,6 +51,7 @@ function roomRoutes(db) {
       room = db.createRoom({ isDirect: true });
       db.addMember(room.id, req.session.userId);
       db.addMember(room.id, other.id);
+      io.to('user:' + other.id).emit('chat_added');
     }
     res.json({ ...room, other_username: other.username, other_user_id: other.id });
   });
