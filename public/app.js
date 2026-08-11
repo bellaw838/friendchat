@@ -130,10 +130,131 @@ $('form-join-room').addEventListener('submit', (e) => {
   });
 });
 
-// ---------- chat (completed in the next task) ----------
-function openChat(chat) {
+// ---------- chat ----------
+const pending = new Map(); // tempId -> message element
+let tempCounter = 0;
+
+async function openChat(chat) {
   currentRoom = chat;
+  $('chat-title').textContent = chatLabel(chat) || '(room)';
+  $('chat-code').textContent = chat.code ? `code: ${chat.code}` : '';
+  $('messages').innerHTML = '';
+  $('emoji-picker').classList.add('hidden');
+  showScreen('screen-chat');
+  try {
+    const history = await api(`/api/rooms/${chat.id}/messages`);
+    for (const m of history) appendMessage(m);
+  } catch (err) {
+    $('chat-title').textContent = err.message;
+  }
 }
+
+$('btn-back').addEventListener('click', () => {
+  currentRoom = null;
+  showScreen('screen-home');
+  loadChats();
+});
+
+function appendMessage(m, extraClass = '') {
+  const div = document.createElement('div');
+  div.className = `msg ${m.sender_id === me.id ? 'mine' : ''} ${extraClass}`.trim();
+  const who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = m.sender_username;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  if (m.kind === 'image' && m.body.startsWith('data:image/')) {
+    const img = document.createElement('img');
+    img.src = m.body;
+    bubble.append(img);
+  } else {
+    bubble.textContent = m.body; // textContent = no HTML injection
+  }
+  div.append(who, bubble);
+  $('messages').append(div);
+  $('messages').scrollTop = $('messages').scrollHeight;
+  return div;
+}
+
+function sendMessage(kind, body) {
+  const tempId = `t${++tempCounter}`;
+  const el = appendMessage(
+    { sender_id: me.id, sender_username: me.username, kind, body },
+    'pending'
+  );
+  pending.set(tempId, el);
+  emitSend(tempId, kind, body, el);
+}
+
+function emitSend(tempId, kind, body, el) {
+  el.classList.remove('failed');
+  el.classList.add('pending');
+  socket.emit('send_message', { roomId: currentRoom.id, kind, body, tempId }, (resp) => {
+    if (!resp || resp.error) {
+      el.classList.remove('pending');
+      el.classList.add('failed');
+      el.title = (resp && resp.error) || 'Failed — tap to retry';
+      el.onclick = () => emitSend(tempId, kind, body, el);
+    }
+    // on success the new_message broadcast replaces this element (see connectSocket)
+  });
+}
+
+$('form-send').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('message-input').value.trim();
+  if (!text || !currentRoom) return;
+  $('message-input').value = '';
+  sendMessage('text', text);
+});
+
+// ---------- images ----------
+$('image-input').addEventListener('change', async () => {
+  const file = $('image-input').files[0];
+  $('image-input').value = '';
+  if (!file || !currentRoom) return;
+  try {
+    const dataUrl = await resizeImage(file);
+    if (dataUrl.length > 700000) throw new Error('Image is too big even after shrinking');
+    sendMessage('image', dataUrl);
+  } catch (err) {
+    alert(err.message || 'Could not read that image');
+  }
+});
+
+function resizeImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => reject(new Error('Could not read that image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// ---------- emoji picker ----------
+const EMOJIS = ('😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😍 🥰 😘 😜 🤪 😎 🤩 🥳 😏 😴 🤔 🤗 🤭 🤫 😬 🙄 😱 😭 🥺 😡 🤯 🤠 🥶 😈 👻 🤖 💩 ' +
+  '👍 👎 👏 🙌 🙏 💪 🤝 ✌️ 🤞 👀 ❤️ 🧡 💛 💚 💙 💜 🖤 💯 🔥 ⭐ ✨ 🎉 🎂 🎁 ⚽ 🏀 🎮 🎧 🍕 🍟 🍦 🍩 🐶 🐱 🦄 🌈 ☀️ 🌙 💤').split(' ');
+
+const picker = $('emoji-picker');
+for (const emoji of EMOJIS) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = emoji;
+  b.addEventListener('click', () => {
+    $('message-input').value += emoji;
+    $('message-input').focus();
+  });
+  picker.append(b);
+}
+$('btn-emoji').addEventListener('click', () => picker.classList.toggle('hidden'));
 
 // ---------- socket ----------
 function connectSocket() {
@@ -149,6 +270,13 @@ function connectSocket() {
   socket.on('presence', ({ userId, online: isOnline }) => {
     if (isOnline) online.add(userId); else online.delete(userId);
     renderChats();
+  });
+  socket.on('new_message', (m) => {
+    if (m.temp_id && pending.has(m.temp_id)) {
+      pending.get(m.temp_id).remove(); // replace optimistic bubble with the real one
+      pending.delete(m.temp_id);
+    }
+    if (currentRoom && m.room_id === currentRoom.id) appendMessage(m);
   });
 }
 
