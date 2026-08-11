@@ -7,18 +7,6 @@ function attachSocket(httpServer, sessionMiddleware, db) {
   const io = new Server(httpServer, { maxHttpBufferSize: 1e6 });
   io.engine.use(sessionMiddleware);
 
-  // Engine.IO's polling transport leaves idle keep-alive HTTP connections open,
-  // which makes httpServer.close(cb) hang forever waiting for them to end on
-  // their own. Force-close any lingering connections as soon as shutdown starts.
-  if (typeof httpServer.closeAllConnections === 'function') {
-    const originalClose = httpServer.close.bind(httpServer);
-    httpServer.close = (cb) => {
-      const result = originalClose(cb);
-      httpServer.closeAllConnections();
-      return result;
-    };
-  }
-
   const online = new Map(); // userId -> open socket count
 
   io.on('connection', (socket) => {
