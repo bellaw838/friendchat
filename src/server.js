@@ -5,6 +5,7 @@ const session = require('express-session');
 const { createDb } = require('./db');
 const { authRoutes } = require('./auth');
 const { roomRoutes } = require('./rooms');
+const { attachSocket } = require('./socket');
 
 function createServer({ dbFile } = {}) {
   const db = createDb(dbFile);
@@ -25,6 +26,7 @@ function createServer({ dbFile } = {}) {
   app.use(roomRoutes(db));
 
   const httpServer = http.createServer(app);
+  attachSocket(httpServer, sessionMiddleware, db);
   return { app, httpServer, db, sessionMiddleware };
 }
 
