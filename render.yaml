@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: bellachat
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: SESSION_SECRET
+        generateValue: true
