@@ -26,8 +26,10 @@ uses the same contract.
   re-viewing. Each member's 30 seconds are independent.
 - **Limits:** photos client-resized as in v1 (max 1280px JPEG); videos max
   15 seconds duration and 10 MB file size, common formats (`video/mp4`,
-  `video/quicktime`, `video/webm`). Server rejects media payloads over
-  10 MB or with a non-`image/`/`video/` MIME type.
+  `video/quicktime`, `video/webm`). On the wire media travels as a base64
+  data-URL (~1.34× the file size), so the server rejects data-URLs over
+  14,000,000 characters (≈10 MB of binary) or with a non-`data:image/` /
+  `data:video/` prefix.
 - **Text messages are unchanged** — still persisted, still in history.
 
 ## Protocol changes
@@ -61,7 +63,7 @@ uses the same contract.
 
 ### Socket.IO server config
 
-- `maxHttpBufferSize` raised to 12 MB (10 MB media + base64/framing headroom).
+- `maxHttpBufferSize` raised to 15,000,000 bytes (14M-char data-URL + framing headroom).
 
 ## Database changes
 
