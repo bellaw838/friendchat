@@ -1,7 +1,7 @@
 # 💬 BellaChat
 
 A private chat website for friends. Username + password accounts, 1-on-1
-chats, group rooms with join codes, emoji, and pictures — all your own code.
+chats, group rooms with join codes, emoji, and disappearing photos/videos — all your own code.
 
 ## Run it on your computer
 
@@ -18,6 +18,20 @@ second private/incognito window and sign up as a different user.
 ```bash
 npm test
 ```
+
+## Disappearing photos & videos
+
+Photos and videos are never stored — not on the server, not in the
+database, not in chat history. They are relayed live to friends who are
+online at that moment, and each viewer gets one 30-second look (with a
+countdown ring) before the media is wiped from their device's memory.
+History only records that "📷 a photo" was shared.
+
+Honest fine print:
+- If you're offline when a photo is sent, you missed it — that's the point.
+- A viewer can still screenshot or screen-record during their 30 seconds.
+  No chat app can prevent that; make sure your friends know.
+- Videos: up to 15 seconds and 10 MB.
 
 ## Put it on the internet (Render, free)
 
