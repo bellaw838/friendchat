@@ -1,5 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
+const path = require('node:path');
+const os = require('node:os');
+const fs = require('node:fs');
+const Database = require('better-sqlite3');
 const { createDb } = require('../src/db');
 
 test('creates and finds users', () => {
@@ -64,4 +68,66 @@ test('messages save and load in order with sender name', () => {
   assert.equal(msgs[1].body, 'second');
   assert.equal(db.listMessages(room.id, 1).length, 1);
   assert.equal(db.listMessages(room.id, 1)[0].body, 'second'); // most recent kept
+});
+
+test('fresh db: media_note kind and is_bot column exist', () => {
+  const db = createDb(':memory:');
+  const a = db.createUser('alice', 'x');
+  const room = db.createRoom({ isDirect: true });
+  db.addMember(room.id, a.id);
+  const marker = db.createMessage({ roomId: room.id, senderId: a.id, kind: 'media_note', body: '📷 photo' });
+  assert.equal(marker.kind, 'media_note');
+  assert.equal(marker.body, '📷 photo');
+  assert.equal(db.getUserByUsername('alice').is_bot, 0);
+});
+
+test('v1 database migrates: image bodies masked, media_note insertable', () => {
+  const file = path.join(os.tmpdir(), `bellachat-migrate-${process.pid}-${Math.floor(Math.random() * 1e9)}.db`);
+  const raw = new Database(file);
+  raw.exec(`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE rooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      code TEXT UNIQUE,
+      is_direct INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE room_members (
+      room_id INTEGER NOT NULL REFERENCES rooms(id),
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      PRIMARY KEY (room_id, user_id)
+    );
+    CREATE TABLE messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL REFERENCES rooms(id),
+      sender_id INTEGER NOT NULL REFERENCES users(id),
+      kind TEXT NOT NULL CHECK (kind IN ('text','image')),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX idx_messages_room ON messages(room_id, id);
+  `);
+  raw.prepare("INSERT INTO users (username, password_hash) VALUES ('alice','x')").run();
+  raw.prepare('INSERT INTO rooms (is_direct) VALUES (1)').run();
+  raw.prepare('INSERT INTO room_members (room_id, user_id) VALUES (1, 1)').run();
+  raw.prepare("INSERT INTO messages (room_id, sender_id, kind, body) VALUES (1, 1, 'image', 'data:image/jpeg;base64,AAAA')").run();
+  raw.prepare("INSERT INTO messages (room_id, sender_id, kind, body) VALUES (1, 1, 'text', 'hello')").run();
+  raw.close();
+
+  const db = createDb(file);
+  const msgs = db.listMessages(1, 50);
+  assert.equal(msgs.length, 2);
+  assert.equal(msgs[0].kind, 'image');
+  assert.equal(msgs[0].body, '📷 photo'); // masked — raw data never leaves the db layer
+  assert.equal(msgs[1].body, 'hello');
+  const marker = db.createMessage({ roomId: 1, senderId: 1, kind: 'media_note', body: '📹 video' });
+  assert.equal(marker.kind, 'media_note');
+
+  for (const suffix of ['', '-wal', '-shm']) fs.rmSync(file + suffix, { force: true });
 });

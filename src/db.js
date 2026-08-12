@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  is_bot INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS rooms (
@@ -23,17 +24,45 @@ CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   room_id INTEGER NOT NULL REFERENCES rooms(id),
   sender_id INTEGER NOT NULL REFERENCES users(id),
-  kind TEXT NOT NULL CHECK (kind IN ('text','image')),
+  kind TEXT NOT NULL CHECK (kind IN ('text','image','media_note')),
   body TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
 `;
 
+function migrate(db) {
+  const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (userCols.length && !userCols.includes('is_bot')) {
+    db.exec("ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0");
+  }
+  const tbl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'").get();
+  if (tbl && !tbl.sql.includes('media_note')) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE messages_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_id INTEGER NOT NULL REFERENCES rooms(id),
+        sender_id INTEGER NOT NULL REFERENCES users(id),
+        kind TEXT NOT NULL CHECK (kind IN ('text','image','media_note')),
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO messages_migrated (id, room_id, sender_id, kind, body, created_at)
+        SELECT id, room_id, sender_id, kind, body, created_at FROM messages;
+      DROP TABLE messages;
+      ALTER TABLE messages_migrated RENAME TO messages;
+      CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
+      COMMIT;
+    `);
+  }
+}
+
 function createDb(filename = process.env.DB_PATH || 'data.db') {
   const db = new Database(filename);
   db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
+  migrate(db);
 
   return {
     createUser(username, passwordHash) {
@@ -92,7 +121,9 @@ function createDb(filename = process.env.DB_PATH || 'data.db') {
     listMessages(roomId, limit = 50) {
       return db.prepare(`
         SELECT * FROM (
-          SELECT m.*, u.username AS sender_username
+          SELECT m.id, m.room_id, m.sender_id, m.kind,
+                 CASE WHEN m.kind = 'image' THEN '📷 photo' ELSE m.body END AS body,
+                 m.created_at, u.username AS sender_username
           FROM messages m JOIN users u ON u.id = m.sender_id
           WHERE m.room_id = ? ORDER BY m.id DESC LIMIT ?
         ) ORDER BY id ASC
