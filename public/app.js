@@ -6,6 +6,10 @@ let chats = [];
 let currentRoom = null;
 let socket = null;
 const online = new Set();
+const mediaStore = new Map();   // markerId -> {mediaType, mime, data}
+const pendingMedia = new Map(); // tempId -> media payload awaiting its marker id
+let viewerTimer = null;
+let viewerOpenFor = null;
 
 // ---------- helpers ----------
 async function api(path, body) {
@@ -163,10 +167,18 @@ function appendMessage(m, extraClass = '') {
   who.textContent = m.sender_username;
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  if (m.kind === 'image' && m.body.startsWith('data:image/')) {
-    const img = document.createElement('img');
-    img.src = m.body;
-    bubble.append(img);
+  if (m.kind === 'media_note' || m.kind === 'image') {
+    const label = m.kind === 'image' ? '📷 photo' : m.body;
+    bubble.dataset.markerId = m.id || '';
+    bubble.dataset.label = label;
+    bubble.dataset.sender = m.sender_username;
+    if (m.id && mediaStore.has(m.id)) {
+      styleBubbleViewable(bubble);
+    } else if (extraClass === 'pending') {
+      bubble.textContent = label;
+    } else {
+      styleBubbleExpired(bubble);
+    }
   } else {
     bubble.textContent = m.body; // textContent = no HTML injection
   }
@@ -175,6 +187,76 @@ function appendMessage(m, extraClass = '') {
   $('messages').scrollTop = $('messages').scrollHeight;
   return div;
 }
+
+function styleBubbleViewable(bubble) {
+  bubble.classList.add('media-view');
+  bubble.classList.remove('media-expired');
+  bubble.textContent = `${bubble.dataset.label} — tap to view`;
+  bubble.onclick = () => openViewer(Number(bubble.dataset.markerId), bubble.dataset.sender);
+}
+
+function styleBubbleExpired(bubble) {
+  bubble.classList.add('media-expired');
+  bubble.classList.remove('media-view');
+  bubble.textContent = `${bubble.dataset.label} — expired`;
+  bubble.onclick = null;
+}
+
+function findBubble(markerId) {
+  return document.querySelector(`#messages .bubble[data-marker-id="${markerId}"]`);
+}
+
+function openViewer(markerId, sender) {
+  const item = mediaStore.get(markerId);
+  if (!item || !/^data:(image|video)\//.test(item.data)) return;
+  const content = $('viewer-content');
+  content.innerHTML = '';
+  let el;
+  if (item.mediaType === 'video') {
+    el = document.createElement('video');
+    el.src = item.data;
+    el.autoplay = true;
+    el.loop = true;
+    el.playsInline = true;
+    el.muted = true;
+    el.onclick = () => { el.muted = !el.muted; }; // tap to unmute
+  } else {
+    el = document.createElement('img');
+    el.src = item.data;
+  }
+  content.append(el);
+  $('viewer-sender').textContent = `from ${sender}`;
+  $('media-viewer').classList.remove('hidden');
+  viewerOpenFor = markerId;
+
+  const RING = 100.53; // circumference of the r=16 circle
+  const TOTAL = 30;
+  const started = performance.now();
+  $('ring-fg').style.strokeDashoffset = '0';
+  $('ring-secs').textContent = String(TOTAL);
+  clearInterval(viewerTimer);
+  viewerTimer = setInterval(() => {
+    const left = TOTAL - (performance.now() - started) / 1000;
+    if (left <= 0) { closeViewer(); return; }
+    $('ring-fg').style.strokeDashoffset = String(RING * (1 - left / TOTAL));
+    $('ring-secs').textContent = String(Math.ceil(left));
+  }, 100);
+}
+
+function closeViewer() {
+  if (viewerOpenFor === null) return;
+  const markerId = viewerOpenFor;
+  viewerOpenFor = null;
+  clearInterval(viewerTimer);
+  viewerTimer = null;
+  mediaStore.delete(markerId); // gone for good — no re-viewing
+  $('viewer-content').innerHTML = '';
+  $('media-viewer').classList.add('hidden');
+  const bubble = findBubble(markerId);
+  if (bubble) styleBubbleExpired(bubble);
+}
+
+$('viewer-close').addEventListener('click', closeViewer);
 
 function sendMessage(kind, body) {
   const tempId = `t${++tempCounter}`;
@@ -214,13 +296,56 @@ $('image-input').addEventListener('change', async () => {
   $('image-input').value = '';
   if (!file || !currentRoom) return;
   try {
-    const dataUrl = await resizeImage(file);
-    if (dataUrl.length > 700000) throw new Error('Image is too big even after shrinking');
-    sendMessage('image', dataUrl);
+    if (file.type.startsWith('image/')) {
+      sendMedia('photo', await resizeImage(file));
+    } else if (file.type.startsWith('video/')) {
+      if (file.size > 10 * 1024 * 1024) throw new Error('Video is over 10 MB — record a shorter one');
+      const seconds = await videoDuration(file);
+      if (seconds > 15.5) throw new Error('Videos can be at most 15 seconds');
+      sendMedia('video', await readAsDataURL(file));
+    } else {
+      throw new Error('Pick a photo or a video');
+    }
   } catch (err) {
-    alert(err.message || 'Could not read that image');
+    alert(err.message || 'Could not read that file');
   }
 });
+
+function videoDuration(file) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(v.duration); };
+    v.onerror = () => reject(new Error('Could not read that video'));
+    v.src = URL.createObjectURL(file);
+  });
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function sendMedia(mediaType, dataUrl) {
+  if (dataUrl.length > 14000000) { alert('Too big even after shrinking'); return; }
+  const tempId = `t${++tempCounter}`;
+  const body = mediaType === 'photo' ? '📷 photo' : '📹 video';
+  const el = appendMessage({ sender_id: me.id, sender_username: me.username, kind: 'media_note', body }, 'pending');
+  pending.set(tempId, el);
+  pendingMedia.set(tempId, { mediaType, mime: null, data: dataUrl });
+  socket.emit('send_media', { roomId: currentRoom.id, mediaType, mime: null, data: dataUrl, tempId }, (resp) => {
+    if (!resp || resp.error) {
+      pendingMedia.delete(tempId);
+      el.classList.remove('pending');
+      el.classList.add('failed');
+      el.title = (resp && resp.error) || 'Failed';
+    }
+  });
+}
 
 function resizeImage(file) {
   return new Promise((resolve, reject) => {
@@ -276,11 +401,21 @@ function connectSocket() {
     loadChats();
   });
   socket.on('new_message', (m) => {
+    if (m.temp_id && pendingMedia.has(m.temp_id)) {
+      mediaStore.set(m.id, pendingMedia.get(m.temp_id)); // sender's own copy, same 30s rules
+      pendingMedia.delete(m.temp_id);
+    }
     if (m.temp_id && pending.has(m.temp_id)) {
-      pending.get(m.temp_id).remove(); // replace optimistic bubble with the real one
+      pending.get(m.temp_id).remove();
       pending.delete(m.temp_id);
     }
     if (currentRoom && m.room_id === currentRoom.id) appendMessage(m);
+  });
+  socket.on('media', (p) => {
+    if (!/^data:(image|video)\//.test(p.data || '')) return;
+    mediaStore.set(p.markerId, { mediaType: p.mediaType, mime: p.mime, data: p.data });
+    const bubble = findBubble(p.markerId);
+    if (bubble) styleBubbleViewable(bubble); // marker may render before or after media arrives
   });
 }
 

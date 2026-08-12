@@ -37,3 +37,11 @@ button.secondary, .button-like { background: #e4e8f5; color: #1c2333; }
 .msg .bubble img { max-width: 100%; border-radius: 8px; display: block; }
 #emoji-picker { background: #fff; border-radius: 12px; padding: 8px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 180px; overflow-y: auto; }
 #emoji-picker button { background: none; font-size: 1.3rem; padding: 4px; }
+#media-viewer { position: fixed; inset: 0; background: rgba(10, 14, 25, .96); z-index: 50; display: flex; flex-direction: column; }
+#viewer-top { display: flex; align-items: center; gap: 10px; padding: 12px; }
+#viewer-sender { color: #cfd6ea; flex: 1; }
+#ring-secs { color: #fff; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: center; }
+#viewer-content { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; min-height: 0; }
+#viewer-content img, #viewer-content video { max-width: 100%; max-height: 100%; border-radius: 12px; }
+.msg .bubble.media-view { cursor: pointer; font-weight: 600; }
+.msg .bubble.media-expired { opacity: .65; font-style: italic; }
