@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const verify = require('./verify');
 
 const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
 
@@ -14,6 +15,9 @@ function authRoutes(db) {
   const router = express.Router();
 
   router.post('/api/signup', (req, res) => {
+    if (verify.isRequired()) {
+      return res.status(503).json({ error: 'Sign-up verification is enabled but not configured yet' });
+    }
     const { username, password } = req.body || {};
     if (!USERNAME_RE.test(username || '')) {
       return res.status(400).json({ error: 'Username must be 3-20 letters, numbers or _' });
