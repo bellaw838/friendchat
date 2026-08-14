@@ -68,10 +68,11 @@ function attachSocket(httpServer, sessionMiddleware, db) {
           roomId, senderId: userId, kind: 'media_note',
           body: mediaType === 'photo' ? '📷 photo' : '📹 video',
         });
+        const safeMime = (typeof mime === 'string' && mime.length <= 100 && /^(image|video)\//.test(mime)) ? mime : null;
         socket.to(`room:${roomId}`).emit('media', {
           mediaId: crypto.randomUUID(), markerId: marker.id, roomId,
           sender_id: userId, sender_username: marker.sender_username,
-          mediaType, mime: mime || null, data,
+          mediaType, mime: safeMime, data,
         });
         io.to(`room:${roomId}`).emit('new_message', { ...marker, temp_id: tempId || null });
         ack({ ok: true, id: marker.id });

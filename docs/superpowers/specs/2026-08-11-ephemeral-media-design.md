@@ -75,7 +75,8 @@ uses the same contract.
   they render as expired markers. The server never sends their bodies to
   clients (history endpoint replaces `image` bodies with `'📷 photo'`).
 - `users.is_bot INTEGER NOT NULL DEFAULT 0` — added by the same migration
-  (plain `ALTER TABLE ADD COLUMN`). Bot members render with a 🤖 badge.
+  (plain `ALTER TABLE ADD COLUMN`). (🤖 badge rendering deferred — see the
+  AI-agent seam section.)
 
 ## Web UI changes
 
@@ -91,8 +92,9 @@ uses the same contract.
   ring (SVG stroke animation), sender name shown. Video plays looped and
   muted-by-default with a tap-to-unmute control. Closing early or the ring
   reaching zero: media blob revoked/nulled, overlay closes, bubble flips to
-  expired. No download button; no context-menu image URL (blob revoked
-  after wipe).
+  expired. No download button; context menu suppressed in the viewer;
+  media travels as data: URLs and is wiped from memory after viewing (a
+  determined viewer can still screenshot — accepted).
 - History load: markers appear like any message; media itself is never in
   history.
 
@@ -105,7 +107,9 @@ uses the same contract.
   (DeepSeek/MiMo-style chat-completions), insert the reply via
   `db.createMessage` as a bot user and broadcast it through the normal
   pipeline — so agent replies work in every client with zero client work.
-- Bot users are ordinary `users` rows with `is_bot = 1`; a future
+- Bot users are ordinary `users` rows with `is_bot = 1` (the 🤖 badge
+  rendering is deferred to the phase that first creates bots — no API
+  response exposes is_bot yet); a future
   "add agent to room" feature is just `addMember` with a bot user. No
   routes, API keys, or UI for agents are built in this phase.
 - Agents never receive media (relay-only media bypasses `onMessage` by

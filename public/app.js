@@ -257,6 +257,7 @@ function closeViewer() {
 }
 
 $('viewer-close').addEventListener('click', closeViewer);
+$('viewer-content').addEventListener('contextmenu', (e) => e.preventDefault());
 
 function sendMessage(kind, body) {
   const tempId = `t${++tempCounter}`;
@@ -301,7 +302,7 @@ $('image-input').addEventListener('change', async () => {
     } else if (file.type.startsWith('video/')) {
       if (file.size > 10 * 1024 * 1024) throw new Error('Video is over 10 MB — record a shorter one');
       const seconds = await videoDuration(file);
-      if (seconds > 15.5) throw new Error('Videos can be at most 15 seconds');
+      if (!Number.isFinite(seconds) || seconds > 15.5) throw new Error('Videos can be at most 15 seconds');
       sendMedia('video', await readAsDataURL(file));
     } else {
       throw new Error('Pick a photo or a video');
@@ -401,11 +402,11 @@ function connectSocket() {
     loadChats();
   });
   socket.on('new_message', (m) => {
-    if (m.temp_id && pendingMedia.has(m.temp_id)) {
+    if (m.temp_id && m.sender_id === me.id && pendingMedia.has(m.temp_id)) {
       mediaStore.set(m.id, pendingMedia.get(m.temp_id)); // sender's own copy, same 30s rules
       pendingMedia.delete(m.temp_id);
     }
-    if (m.temp_id && pending.has(m.temp_id)) {
+    if (m.temp_id && m.sender_id === me.id && pending.has(m.temp_id)) {
       pending.get(m.temp_id).remove();
       pending.delete(m.temp_id);
     }
