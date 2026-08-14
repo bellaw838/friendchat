@@ -175,7 +175,8 @@ function createDb(filename = process.env.DB_PATH || 'data.db') {
     },
     removeFriend(userId, otherId) {
       const [lo, hi] = userId < otherId ? [userId, otherId] : [otherId, userId];
-      db.prepare('DELETE FROM friendships WHERE user_lo = ? AND user_hi = ?').run(lo, hi);
+      const info = db.prepare('DELETE FROM friendships WHERE user_lo = ? AND user_hi = ?').run(lo, hi);
+      return info.changes > 0;
     },
     areFriends(a, b) {
       const [lo, hi] = a < b ? [a, b] : [b, a];

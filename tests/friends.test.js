@@ -101,3 +101,46 @@ test('friends_changed pokes both users over sockets', async () => {
     await new Promise((r) => httpServer.close(r));
   }
 });
+
+test('no friends_changed poke without a real state change', async () => {
+  const { app, httpServer } = createServer({ dbFile: ':memory:' });
+  await new Promise((r) => httpServer.listen(0, r));
+  const port = httpServer.address().port;
+  const alice = await signedUpAgent(app, 'alice');
+  const bob = await signedUpAgent(app, 'bob');
+  const cara = await signedUpAgent(app, 'cara');
+  const sockB = io(`http://localhost:${port}`, { extraHeaders: { Cookie: bob.cookie }, transports: ['polling'], forceNew: true });
+  try {
+    await new Promise((r) => sockB.once('connect', r));
+    let pokes = 0;
+    sockB.on('friends_changed', () => pokes++);
+
+    const bobId = (await bob.get('/api/me').expect(200)).body.id;
+
+    // stranger's no-op delete: cara has no relationship with bob at all
+    await cara.delete(`/api/friends/${bobId}`).expect(200);
+
+    // genuine request: this SHOULD poke, and proves the counter works
+    const pokeB = new Promise((r) => sockB.once('friends_changed', r));
+    await alice.post('/api/friends/request').send({ username: 'bob' }).expect(200);
+    await pokeB;
+
+    // duplicate request: already pending, no state change, should not poke
+    await alice.post('/api/friends/request').send({ username: 'bob' }).expect(200);
+
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(pokes, 1);
+  } finally {
+    sockB.close();
+    httpServer.closeAllConnections?.();
+    await new Promise((r) => httpServer.close(r));
+  }
+});
+
+test('friends routes require login', async () => {
+  const { app } = createServer({ dbFile: ':memory:' });
+  await request(app).get('/api/friends').expect(401);
+  await request(app).post('/api/friends/request').send({ username: 'bob' }).expect(401);
+  await request(app).post('/api/friends/respond').send({ userId: 1, accept: true }).expect(401);
+  await request(app).delete('/api/friends/1').expect(401);
+});

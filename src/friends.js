@@ -32,7 +32,7 @@ function friendRoutes(db, io) {
     if (result.already && result.status === 'accepted') {
       return res.status(409).json({ error: 'Already friends' });
     }
-    notifyBoth(req.session.userId, other.id);
+    if (!result.already) notifyBoth(req.session.userId, other.id);
     res.json({ status: result.status });
   });
 
@@ -48,8 +48,8 @@ function friendRoutes(db, io) {
 
   router.delete('/api/friends/:userId', (req, res) => {
     const otherId = Number(req.params.userId);
-    db.removeFriend(req.session.userId, otherId);
-    notifyBoth(req.session.userId, otherId);
+    const removed = db.removeFriend(req.session.userId, otherId);
+    if (removed) notifyBoth(req.session.userId, otherId);
     res.json({ ok: true });
   });
 

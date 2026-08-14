@@ -151,12 +151,14 @@ function renderFriends() {
     reqs.append(li);
   }
 
-  const friendIds = new Set(friendsData.friends.map((f) => f.id));
+  const knownIds = new Set([
+    ...friendsData.friends, ...friendsData.incoming, ...friendsData.outgoing,
+  ].map((f) => f.id));
   for (const f of friendsData.friends) {
     list.append(friendRow(f.id, f.username, () => openFriendChat(f)));
   }
   for (const chat of chats) {
-    if (chat.is_direct && !friendIds.has(chat.other_user_id)) {
+    if (chat.is_direct && !knownIds.has(chat.other_user_id)) {
       list.append(friendRow(chat.other_user_id, chat.other_username, () => openChat(chat)));
     }
   }
