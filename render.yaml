@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bellachat
+    name: friendschat
     runtime: node
     plan: free
     buildCommand: npm install

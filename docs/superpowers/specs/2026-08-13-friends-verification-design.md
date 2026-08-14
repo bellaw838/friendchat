@@ -1,9 +1,9 @@
-# BellaChat Phase 2a — Friends System + Sign-up Verification Seam (server + web)
+# FriendsChat Phase 2a — Friends System + Sign-up Verification Seam (server + web)
 
 **Date:** 2026-08-13
 **Status:** Approved by user (pending spec review)
 **Follows:** `2026-08-11-ephemeral-media-design.md` (built; final fixes pending commit)
-**Followed by:** Phase 2b — BellaChat iOS app (separate spec; consumes this contract)
+**Followed by:** Phase 2b — FriendsChat iOS app (separate spec; consumes this contract)
 
 ## Purpose
 

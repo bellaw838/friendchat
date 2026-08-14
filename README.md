@@ -1,4 +1,4 @@
-# 💬 BellaChat
+# 💬 FriendsChat
 
 A private chat website for friends. Username + password accounts, 1-on-1
 chats, group rooms with join codes, emoji, and disappearing photos/videos — all your own code.
@@ -39,7 +39,7 @@ Honest fine print:
 2. Sign up at https://render.com (free).
 3. New → Blueprint → connect the repo. Render reads `render.yaml` and
    deploys automatically.
-4. Share your link (like `https://bellachat.onrender.com`) with friends.
+4. Share your link (like `https://friendschat.onrender.com`) with friends.
 
 **Free-tier fine print:** the app falls asleep after ~15 minutes with no
 visitors — the first person to open it waits ~30 seconds while it wakes up.

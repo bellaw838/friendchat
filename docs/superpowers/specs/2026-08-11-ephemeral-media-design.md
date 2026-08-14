@@ -1,9 +1,9 @@
-# BellaChat Phase 1 — Ephemeral Media + AI-Agent Seam (server + web)
+# FriendsChat Phase 1 — Ephemeral Media + AI-Agent Seam (server + web)
 
 **Date:** 2026-08-11
 **Status:** Approved by user (pending spec review)
-**Follows:** `2026-08-10-bellachat-design.md` (v1, built and deployed)
-**Followed by:** Phase 2 — BellaChat iOS app (separate spec; consumes this contract)
+**Follows:** `2026-08-10-friendschat-design.md` (v1, built and deployed)
+**Followed by:** Phase 2 — FriendsChat iOS app (separate spec; consumes this contract)
 
 ## Purpose
 

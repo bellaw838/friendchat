@@ -1,4 +1,4 @@
-# BellaChat — Design Spec
+# FriendsChat — Design Spec
 
 **Date:** 2026-08-10
 **Status:** Approved by user (pending spec review)

@@ -1,4 +1,4 @@
-# BellaChat Implementation Plan
+# FriendsChat Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node.js 20+, Express 4, express-session, Socket.IO 4, better-sqlite3, bcryptjs. Tests: `node:test` + supertest + socket.io-client. Frontend: vanilla HTML/CSS/JS, no frameworks, no CDNs (the Socket.IO client script is served by our own server at `/socket.io/socket.io.js`).
 
-**Spec:** `docs/superpowers/specs/2026-08-10-bellachat-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-10-friendschat-design.md`
 
 ## Global Constraints
 
@@ -35,7 +35,7 @@
 
 ```json
 {
-  "name": "bellachat",
+  "name": "friendschat",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -473,7 +473,7 @@ function createServer({ dbFile } = {}) {
 if (require.main === module) {
   const port = process.env.PORT || 3000;
   createServer().httpServer.listen(port, () => {
-    console.log(`BellaChat running on http://localhost:${port}`);
+    console.log(`FriendsChat running on http://localhost:${port}`);
   });
 }
 
@@ -868,14 +868,14 @@ git commit -m "feat: real-time messages and presence over Socket.IO"
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BellaChat</title>
+  <title>FriendsChat</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="conn-banner" class="hidden">connecting…</div>
 
   <div id="screen-auth" class="screen">
-    <h1>💬 BellaChat</h1>
+    <h1>💬 FriendsChat</h1>
     <form id="auth-form" class="card">
       <input id="auth-username" placeholder="username" autocomplete="username" maxlength="20" required>
       <input id="auth-password" type="password" placeholder="password (8+ characters)" autocomplete="current-password" required>
@@ -887,7 +887,7 @@ git commit -m "feat: real-time messages and presence over Socket.IO"
 
   <div id="screen-home" class="screen hidden">
     <header>
-      <h1>💬 BellaChat</h1>
+      <h1>💬 FriendsChat</h1>
       <div><b id="home-me"></b> <button id="btn-logout" class="secondary">Log out</button></div>
     </header>
     <p id="home-error" class="error"></p>
@@ -1349,7 +1349,7 @@ git commit -m "feat: chat view with emoji picker and pictures"
 ```yaml
 services:
   - type: web
-    name: bellachat
+    name: friendschat
     runtime: node
     plan: free
     buildCommand: npm install
@@ -1362,7 +1362,7 @@ services:
 - [ ] **Step 2: Create `README.md`**
 
 ```markdown
-# 💬 BellaChat
+# 💬 FriendsChat
 
 A private chat website for friends. Username + password accounts, 1-on-1
 chats, group rooms with join codes, emoji, and pictures — all your own code.
@@ -1389,7 +1389,7 @@ npm test
 2. Sign up at https://render.com (free).
 3. New → Blueprint → connect the repo. Render reads `render.yaml` and
    deploys automatically.
-4. Share your link (like `https://bellachat.onrender.com`) with friends.
+4. Share your link (like `https://friendschat.onrender.com`) with friends.
 
 **Free-tier fine print:** the app falls asleep after ~15 minutes with no
 visitors — the first person to open it waits ~30 seconds while it wakes up.

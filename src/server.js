@@ -35,7 +35,7 @@ function createServer({ dbFile } = {}) {
 if (require.main === module) {
   const port = process.env.PORT || 3000;
   createServer().httpServer.listen(port, () => {
-    console.log(`BellaChat running on http://localhost:${port}`);
+    console.log(`FriendsChat running on http://localhost:${port}`);
   });
 }
 

@@ -49,7 +49,7 @@ test('fresh db: media_note kind and is_bot column exist', () => {
 });
 
 test('v1 database migrates: image bodies masked, media_note insertable', () => {
-  const file = path.join(os.tmpdir(), `bellachat-migrate-${process.pid}-${Math.floor(Math.random() * 1e9)}.db`);
+  const file = path.join(os.tmpdir(), `friendschat-migrate-${process.pid}-${Math.floor(Math.random() * 1e9)}.db`);
   const raw = new Database(file);
   raw.exec(`
     CREATE TABLE users (
