@@ -45,3 +45,6 @@ button.secondary, .button-like { background: #e4e8f5; color: #1c2333; }
 #viewer-content img, #viewer-content video { max-width: 100%; max-height: 100%; border-radius: 12px; }
 .msg .bubble.media-view { cursor: pointer; font-weight: 600; }
 .msg .bubble.media-expired { opacity: .65; font-style: italic; }
+.chat-list li button { padding: 4px 10px; flex-shrink: 0; }
+.chat-list li.outgoing { opacity: .65; cursor: default; }
+.chat-list li .grow { flex: 1; }

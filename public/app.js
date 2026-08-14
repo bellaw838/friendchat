@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 
 let me = null;
 let chats = [];
+let friendsData = { friends: [], incoming: [], outgoing: [] };
 let currentRoom = null;
 let socket = null;
 const online = new Set();
@@ -19,6 +20,13 @@ async function api(path, body) {
     body: JSON.stringify(body),
   };
   const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
+
+async function apiDelete(path) {
+  const res = await fetch(path, { method: 'DELETE' });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Something went wrong');
   return data;
@@ -58,7 +66,7 @@ async function enterApp() {
   $('home-me').textContent = me.username;
   showScreen('screen-home');
   connectSocket();
-  await loadChats();
+  await Promise.all([loadChats(), loadFriends()]);
 }
 
 async function loadChats() {
@@ -66,30 +74,30 @@ async function loadChats() {
   renderChats();
 }
 
+async function loadFriends() {
+  friendsData = await api('/api/friends');
+  renderFriends();
+}
+
 function renderChats() {
-  const directs = $('list-directs');
   const rooms = $('list-rooms');
-  directs.innerHTML = '';
   rooms.innerHTML = '';
   for (const chat of chats) {
+    if (chat.is_direct) continue;
     const li = document.createElement('li');
-    if (chat.is_direct) {
-      const dot = document.createElement('span');
-      dot.className = 'dot' + (online.has(chat.other_user_id) ? ' online' : '');
-      li.append(dot);
-    }
     const label = document.createElement('span');
     label.textContent = chatLabel(chat) || '(room)';
     li.append(label);
-    if (!chat.is_direct && chat.code) {
+    if (chat.code) {
       const code = document.createElement('span');
       code.className = 'muted';
       code.textContent = chat.code;
       li.append(code);
     }
     li.addEventListener('click', () => openChat(chat));
-    (chat.is_direct ? directs : rooms).append(li);
+    rooms.append(li);
   }
+  renderFriends();
 }
 
 async function homeAction(fn) {
@@ -101,14 +109,93 @@ async function homeAction(fn) {
   }
 }
 
-$('form-new-direct').addEventListener('submit', (e) => {
-  e.preventDefault();
+function friendRow(userId, username, onClick) {
+  const li = document.createElement('li');
+  const dot = document.createElement('span');
+  dot.className = 'dot' + (online.has(userId) ? ' online' : '');
+  const label = document.createElement('span');
+  label.className = 'grow';
+  label.textContent = username;
+  li.append(dot, label);
+  li.addEventListener('click', onClick);
+  return li;
+}
+
+function renderFriends() {
+  const reqs = $('list-requests');
+  const list = $('list-friends');
+  reqs.innerHTML = '';
+  list.innerHTML = '';
+
+  for (const r of friendsData.incoming) {
+    const li = document.createElement('li');
+    const label = document.createElement('span');
+    label.className = 'grow';
+    label.textContent = `${r.username} wants to be friends`;
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.textContent = '✓';
+    yes.addEventListener('click', () => homeAction(async () => {
+      await api('/api/friends/respond', { userId: r.id, accept: true });
+      await Promise.all([loadFriends(), loadChats()]);
+    }));
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'secondary';
+    no.textContent = '✕';
+    no.addEventListener('click', () => homeAction(async () => {
+      await api('/api/friends/respond', { userId: r.id, accept: false });
+      await loadFriends();
+    }));
+    li.append(label, yes, no);
+    reqs.append(li);
+  }
+
+  const friendIds = new Set(friendsData.friends.map((f) => f.id));
+  for (const f of friendsData.friends) {
+    list.append(friendRow(f.id, f.username, () => openFriendChat(f)));
+  }
+  for (const chat of chats) {
+    if (chat.is_direct && !friendIds.has(chat.other_user_id)) {
+      list.append(friendRow(chat.other_user_id, chat.other_username, () => openChat(chat)));
+    }
+  }
+  for (const o of friendsData.outgoing) {
+    const li = document.createElement('li');
+    li.className = 'outgoing';
+    const label = document.createElement('span');
+    label.className = 'grow';
+    label.textContent = `${o.username} — request sent`;
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'secondary';
+    cancel.textContent = '✕';
+    cancel.addEventListener('click', () => homeAction(async () => {
+      await apiDelete(`/api/friends/${o.id}`);
+      await loadFriends();
+    }));
+    li.append(label, cancel);
+    list.append(li);
+  }
+}
+
+async function openFriendChat(f) {
+  const existing = chats.find((c) => c.is_direct && c.other_user_id === f.id);
+  if (existing) return openChat(existing);
   homeAction(async () => {
-    const room = await api('/api/directs', { username: $('new-direct-username').value.trim() });
-    $('new-direct-username').value = '';
+    const room = await api('/api/directs', { username: f.username });
     socket.emit('sync_rooms');
     await loadChats();
     openChat({ ...room, is_direct: 1 });
+  });
+}
+
+$('form-add-friend').addEventListener('submit', (e) => {
+  e.preventDefault();
+  homeAction(async () => {
+    await api('/api/friends/request', { username: $('add-friend-username').value.trim() });
+    $('add-friend-username').value = '';
+    await Promise.all([loadFriends(), loadChats()]);
   });
 });
 
@@ -399,6 +486,10 @@ function connectSocket() {
   });
   socket.on('chat_added', () => {
     socket.emit('sync_rooms');
+    loadChats();
+  });
+  socket.on('friends_changed', () => {
+    loadFriends();
     loadChats();
   });
   socket.on('new_message', (m) => {
