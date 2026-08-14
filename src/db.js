@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS friendships (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_lo, user_hi)
 );
+CREATE TABLE IF NOT EXISTS room_reads (
+  room_id INTEGER NOT NULL REFERENCES rooms(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  last_read_id INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (room_id, user_id)
+);
 `;
 
 function migrate(db) {
@@ -122,11 +128,33 @@ function createDb(filename = process.env.DB_PATH || 'data.db') {
           (SELECT u.username FROM room_members m JOIN users u ON u.id = m.user_id
              WHERE m.room_id = r.id AND m.user_id != ? LIMIT 1) AS other_username,
           (SELECT m2.user_id FROM room_members m2
-             WHERE m2.room_id = r.id AND m2.user_id != ? LIMIT 1) AS other_user_id
-        FROM rooms r JOIN room_members rm ON rm.room_id = r.id
+             WHERE m2.room_id = r.id AND m2.user_id != ? LIMIT 1) AS other_user_id,
+          last.id AS last_message_id,
+          CASE WHEN last.kind = 'image' THEN '📷 photo' ELSE last.body END AS last_body,
+          last.kind AS last_kind,
+          last.created_at AS last_at,
+          lu.username AS last_sender,
+          last.sender_id AS last_sender_id,
+          (SELECT COUNT(*) FROM messages un
+             WHERE un.room_id = r.id AND un.sender_id != ?
+               AND un.id > COALESCE((SELECT rr.last_read_id FROM room_reads rr
+                                       WHERE rr.room_id = r.id AND rr.user_id = ?), 0)
+          ) AS unread
+        FROM rooms r
+        JOIN room_members rm ON rm.room_id = r.id
+        LEFT JOIN messages last ON last.id =
+          (SELECT m3.id FROM messages m3 WHERE m3.room_id = r.id ORDER BY m3.id DESC LIMIT 1)
+        LEFT JOIN users lu ON lu.id = last.sender_id
         WHERE rm.user_id = ?
-        ORDER BY r.id DESC
-      `).all(userId, userId, userId);
+        ORDER BY COALESCE(last.id, 0) DESC, r.id DESC
+      `).all(userId, userId, userId, userId, userId);
+    },
+    markRoomRead(roomId, userId) {
+      const last = db.prepare('SELECT MAX(id) AS id FROM messages WHERE room_id = ?').get(roomId);
+      db.prepare(`
+        INSERT INTO room_reads (room_id, user_id, last_read_id) VALUES (?, ?, ?)
+        ON CONFLICT(room_id, user_id) DO UPDATE SET last_read_id = excluded.last_read_id
+      `).run(roomId, userId, (last && last.id) || 0);
     },
     createMessage({ roomId, senderId, kind, body }) {
       const info = db

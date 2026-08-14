@@ -6,6 +6,7 @@ let chats = [];
 let friendsData = { friends: [], incoming: [], outgoing: [] };
 let currentRoom = null;
 let socket = null;
+let searchTerm = '';
 const online = new Set();
 const mediaStore = new Map();   // markerId -> {mediaType, mime, data}
 const pendingMedia = new Map(); // tempId -> media payload awaiting its marker id
@@ -38,7 +39,44 @@ function showScreen(id) {
 }
 
 function chatLabel(chat) {
-  return chat.is_direct ? chat.other_username : chat.name;
+  return (chat.is_direct ? chat.other_username : chat.name) || 'Chat';
+}
+
+const AVATAR_COLORS = ['#128c7e', '#7f66ff', '#e5793b', '#d6417a', '#0aa2c0', '#5b8c00', '#c0392b', '#6d4c41'];
+function avatarFor(name, userId) {
+  const el = document.createElement('div');
+  el.className = 'avatar';
+  const label = (name || '?').trim();
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) >>> 0;
+  el.style.background = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  el.textContent = label.charAt(0).toUpperCase();
+  if (userId != null) {
+    const dot = document.createElement('span');
+    dot.className = 'presence' + (online.has(userId) ? ' online' : '');
+    el.append(dot);
+  }
+  return el;
+}
+
+// "14:32" today, "Mon" this week, else "3/8/26"
+function shortTime(iso) {
+  if (!iso) return '';
+  const then = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
+  if (Number.isNaN(then.getTime())) return '';
+  const now = new Date();
+  if (then.toDateString() === now.toDateString()) {
+    return then.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if ((now - then) / 86400000 < 7) return then.toLocaleDateString([], { weekday: 'short' });
+  return then.toLocaleDateString([], { day: 'numeric', month: 'numeric', year: '2-digit' });
+}
+
+function previewOf(chat) {
+  if (!chat.last_body) return 'Tap to start chatting';
+  const mine = chat.last_sender_id === me.id;
+  const who = mine ? 'You: ' : (chat.is_direct ? '' : `${chat.last_sender}: `);
+  return who + chat.last_body;
 }
 
 // ---------- auth ----------
@@ -56,14 +94,16 @@ async function handleAuth(path) {
 }
 $('auth-form').addEventListener('submit', (e) => { e.preventDefault(); handleAuth('/api/login'); });
 $('btn-signup').addEventListener('click', () => handleAuth('/api/signup'));
-$('btn-logout').addEventListener('click', async () => {
+$('btn-account').addEventListener('click', async () => {
+  if (!confirm(`Logged in as ${me.username}.\n\nLog out?`)) return;
   await api('/api/logout', {});
   location.reload();
 });
 
 // ---------- home ----------
 async function enterApp() {
-  $('home-me').textContent = me.username;
+  $('btn-account').textContent = me.username.charAt(0).toUpperCase();
+  $('sheet-me').textContent = me.username;
   showScreen('screen-home');
   connectSocket();
   await Promise.all([loadChats(), loadFriends()]);
@@ -71,33 +111,118 @@ async function enterApp() {
 
 async function loadChats() {
   chats = await api('/api/chats');
-  renderChats();
+  renderHome();
 }
 
 async function loadFriends() {
   friendsData = await api('/api/friends');
-  renderFriends();
+  renderHome();
 }
 
-function renderChats() {
-  const rooms = $('list-rooms');
-  rooms.innerHTML = '';
-  for (const chat of chats) {
-    if (chat.is_direct) continue;
-    const li = document.createElement('li');
-    const label = document.createElement('span');
-    label.textContent = chatLabel(chat) || '(room)';
-    li.append(label);
-    if (chat.code) {
-      const code = document.createElement('span');
-      code.className = 'muted';
-      code.textContent = chat.code;
-      li.append(code);
-    }
-    li.addEventListener('click', () => openChat(chat));
-    rooms.append(li);
+$('search-chats').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim().toLowerCase();
+  renderConversations();
+});
+
+function renderHome() {
+  renderRequests();
+  renderConversations();
+}
+
+function renderRequests() {
+  const banner = $('requests-banner');
+  banner.innerHTML = '';
+  banner.classList.toggle('hidden', friendsData.incoming.length === 0);
+  for (const r of friendsData.incoming) {
+    const row = document.createElement('div');
+    row.className = 'req-row';
+    const text = document.createElement('span');
+    text.className = 'grow';
+    text.textContent = `${r.username} wants to be friends`;
+    const yes = document.createElement('button');
+    yes.className = 'req-yes';
+    yes.textContent = 'Accept';
+    yes.addEventListener('click', () => homeAction(async () => {
+      await api('/api/friends/respond', { userId: r.id, accept: true });
+      await Promise.all([loadFriends(), loadChats()]);
+    }));
+    const no = document.createElement('button');
+    no.className = 'req-no';
+    no.textContent = 'Decline';
+    no.addEventListener('click', () => homeAction(async () => {
+      await api('/api/friends/respond', { userId: r.id, accept: false });
+      await loadFriends();
+    }));
+    row.append(text, yes, no);
+    banner.append(row);
   }
-  renderFriends();
+}
+
+// One list: real chats first (newest activity first), then friends you haven't messaged yet.
+function conversationRows() {
+  const rows = chats.map((chat) => ({
+    name: chatLabel(chat),
+    userId: chat.is_direct ? chat.other_user_id : null,
+    preview: previewOf(chat),
+    time: shortTime(chat.last_at),
+    unread: chat.unread || 0,
+    open: () => openChat(chat),
+  }));
+  const chattedWith = new Set(chats.filter((c) => c.is_direct).map((c) => c.other_user_id));
+  for (const f of friendsData.friends) {
+    if (chattedWith.has(f.id)) continue;
+    rows.push({
+      name: f.username,
+      userId: f.id,
+      preview: 'Tap to start chatting',
+      time: '',
+      unread: 0,
+      open: () => openFriendChat(f),
+    });
+  }
+  return rows;
+}
+
+function renderConversations() {
+  const list = $('chat-list');
+  list.innerHTML = '';
+  const rows = conversationRows().filter((r) => !searchTerm || r.name.toLowerCase().includes(searchTerm));
+  $('empty-state').classList.toggle('hidden', rows.length > 0);
+
+  for (const row of rows) {
+    const li = document.createElement('li');
+    li.append(avatarFor(row.name, row.userId));
+
+    const main = document.createElement('div');
+    main.className = 'conv-main';
+    const top = document.createElement('div');
+    top.className = 'conv-top';
+    const name = document.createElement('span');
+    name.className = 'conv-name';
+    name.textContent = row.name;
+    const time = document.createElement('span');
+    time.className = 'conv-time' + (row.unread ? ' unread' : '');
+    time.textContent = row.time;
+    top.append(name, time);
+
+    const bottom = document.createElement('div');
+    bottom.className = 'conv-bottom';
+    const preview = document.createElement('span');
+    preview.className = 'conv-preview';
+    preview.textContent = row.preview;
+    bottom.append(preview);
+    if (row.unread) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = row.unread > 99 ? '99+' : String(row.unread);
+      bottom.append(badge);
+    }
+
+    main.append(top, bottom);
+    li.append(main);
+    li.addEventListener('click', row.open);
+    list.append(li);
+  }
 }
 
 async function homeAction(fn) {
@@ -106,78 +231,6 @@ async function homeAction(fn) {
     await fn();
   } catch (err) {
     $('home-error').textContent = err.message;
-  }
-}
-
-function friendRow(userId, username, onClick) {
-  const li = document.createElement('li');
-  const dot = document.createElement('span');
-  dot.className = 'dot' + (online.has(userId) ? ' online' : '');
-  const label = document.createElement('span');
-  label.className = 'grow';
-  label.textContent = username;
-  li.append(dot, label);
-  li.addEventListener('click', onClick);
-  return li;
-}
-
-function renderFriends() {
-  const reqs = $('list-requests');
-  const list = $('list-friends');
-  reqs.innerHTML = '';
-  list.innerHTML = '';
-
-  for (const r of friendsData.incoming) {
-    const li = document.createElement('li');
-    const label = document.createElement('span');
-    label.className = 'grow';
-    label.textContent = `${r.username} wants to be friends`;
-    const yes = document.createElement('button');
-    yes.type = 'button';
-    yes.textContent = '✓';
-    yes.addEventListener('click', () => homeAction(async () => {
-      await api('/api/friends/respond', { userId: r.id, accept: true });
-      await Promise.all([loadFriends(), loadChats()]);
-    }));
-    const no = document.createElement('button');
-    no.type = 'button';
-    no.className = 'secondary';
-    no.textContent = '✕';
-    no.addEventListener('click', () => homeAction(async () => {
-      await api('/api/friends/respond', { userId: r.id, accept: false });
-      await loadFriends();
-    }));
-    li.append(label, yes, no);
-    reqs.append(li);
-  }
-
-  const knownIds = new Set([
-    ...friendsData.friends, ...friendsData.incoming, ...friendsData.outgoing,
-  ].map((f) => f.id));
-  for (const f of friendsData.friends) {
-    list.append(friendRow(f.id, f.username, () => openFriendChat(f)));
-  }
-  for (const chat of chats) {
-    if (chat.is_direct && !knownIds.has(chat.other_user_id)) {
-      list.append(friendRow(chat.other_user_id, chat.other_username, () => openChat(chat)));
-    }
-  }
-  for (const o of friendsData.outgoing) {
-    const li = document.createElement('li');
-    li.className = 'outgoing';
-    const label = document.createElement('span');
-    label.className = 'grow';
-    label.textContent = `${o.username} — request sent`;
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.className = 'secondary';
-    cancel.textContent = '✕';
-    cancel.addEventListener('click', () => homeAction(async () => {
-      await apiDelete(`/api/friends/${o.id}`);
-      await loadFriends();
-    }));
-    li.append(label, cancel);
-    list.append(li);
   }
 }
 
@@ -192,35 +245,146 @@ async function openFriendChat(f) {
   });
 }
 
-$('form-add-friend').addEventListener('submit', (e) => {
-  e.preventDefault();
-  homeAction(async () => {
-    await api('/api/friends/request', { username: $('add-friend-username').value.trim() });
-    $('add-friend-username').value = '';
-    await Promise.all([loadFriends(), loadChats()]);
-  });
-});
+// ---------- the + sheet ----------
+const SHEET_ACTIONS = {
+  friend: {
+    title: 'Add a friend',
+    placeholder: "friend's exact username",
+    submit: 'Send request',
+    maxlength: 20,
+    run: async (value) => {
+      await api('/api/friends/request', { username: value });
+      await Promise.all([loadFriends(), loadChats()]);
+      return 'Request sent ✓';
+    },
+  },
+  group: {
+    title: 'Create a group',
+    placeholder: 'group name',
+    submit: 'Create',
+    maxlength: 40,
+    run: async (value) => {
+      const room = await api('/api/rooms', { name: value });
+      socket.emit('sync_rooms');
+      await loadChats();
+      closeSheet();
+      openChat(room);
+    },
+  },
+  join: {
+    title: 'Join with a code',
+    placeholder: 'e.g. X7K2PQ',
+    submit: 'Join',
+    maxlength: 6,
+    run: async (value) => {
+      const room = await api('/api/rooms/join', { code: value });
+      socket.emit('sync_rooms');
+      await loadChats();
+      closeSheet();
+      openChat(room);
+    },
+  },
+};
+let sheetAction = null;
 
-$('form-new-room').addEventListener('submit', (e) => {
-  e.preventDefault();
-  homeAction(async () => {
-    const room = await api('/api/rooms', { name: $('new-room-name').value.trim() });
-    $('new-room-name').value = '';
-    socket.emit('sync_rooms');
-    await loadChats();
-    openChat(room);
-  });
-});
+function openSheet() {
+  sheetAction = null;
+  $('sheet-menu').classList.remove('hidden');
+  $('sheet-form').classList.add('hidden');
+  $('sheet').classList.remove('hidden');
+  $('sheet-backdrop').classList.remove('hidden');
+}
 
-$('form-join-room').addEventListener('submit', (e) => {
+function closeSheet() {
+  $('sheet').classList.add('hidden');
+  $('sheet-backdrop').classList.add('hidden');
+  $('sheet-error').textContent = '';
+  $('sheet-input').value = '';
+}
+
+function openSheetAction(key) {
+  sheetAction = key;
+  const cfg = SHEET_ACTIONS[key];
+  $('sheet-title').textContent = cfg.title;
+  $('sheet-input').placeholder = cfg.placeholder;
+  $('sheet-input').maxLength = cfg.maxlength;
+  $('sheet-input').value = '';
+  $('sheet-submit').textContent = cfg.submit;
+  $('sheet-error').textContent = '';
+  $('sheet-menu').classList.add('hidden');
+  $('sheet-form').classList.remove('hidden');
+  renderSheetFriends();
+  $('sheet-input').focus();
+}
+
+// On "Add a friend", also list requests you've sent, so they can be cancelled.
+function renderSheetFriends() {
+  const list = $('sheet-friends');
+  list.innerHTML = '';
+  if (sheetAction !== 'friend') return;
+  for (const o of friendsData.outgoing) {
+    const li = document.createElement('li');
+    li.append(avatarFor(o.username, o.id));
+    const main = document.createElement('div');
+    main.className = 'conv-main';
+    const name = document.createElement('div');
+    name.className = 'conv-name';
+    name.textContent = o.username;
+    const sub = document.createElement('div');
+    sub.className = 'conv-preview';
+    sub.textContent = 'Request sent — waiting';
+    main.append(name, sub);
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'req-no';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', async () => {
+      try {
+        await apiDelete(`/api/friends/${o.id}`);
+        await loadFriends();
+        renderSheetFriends();
+      } catch (err) {
+        $('sheet-error').textContent = err.message;
+      }
+    });
+    li.append(main, cancel);
+    list.append(li);
+  }
+}
+
+$('fab').addEventListener('click', openSheet);
+$('sheet-backdrop').addEventListener('click', closeSheet);
+$('sheet-back').addEventListener('click', openSheet);
+for (const btn of document.querySelectorAll('.sheet-item')) {
+  btn.addEventListener('click', () => openSheetAction(btn.dataset.action));
+}
+$('btn-copy-me').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(me.username);
+    $('btn-copy-me').textContent = 'copied ✓';
+    setTimeout(() => { $('btn-copy-me').textContent = 'copy'; }, 1500);
+  } catch {
+    $('btn-copy-me').textContent = me.username;
+  }
+});
+$('sheet-action').addEventListener('submit', async (e) => {
   e.preventDefault();
-  homeAction(async () => {
-    const room = await api('/api/rooms/join', { code: $('join-room-code').value.trim() });
-    $('join-room-code').value = '';
-    socket.emit('sync_rooms');
-    await loadChats();
-    openChat(room);
-  });
+  const value = $('sheet-input').value.trim();
+  if (!value || !sheetAction) return;
+  $('sheet-error').textContent = '';
+  try {
+    const note = await SHEET_ACTIONS[sheetAction].run(value);
+    if (note) {
+      $('sheet-input').value = '';
+      $('sheet-error').style.color = '#128c7e';
+      $('sheet-error').textContent = note;
+      setTimeout(() => { $('sheet-error').style.color = ''; $('sheet-error').textContent = ''; }, 2000);
+      renderSheetFriends();
+    }
+  } catch (err) {
+    $('sheet-error').style.color = '';
+    $('sheet-error').textContent = err.message;
+  }
 });
 
 // ---------- chat ----------
@@ -229,8 +393,14 @@ let tempCounter = 0;
 
 async function openChat(chat) {
   currentRoom = chat;
-  $('chat-title').textContent = chatLabel(chat) || '(room)';
-  $('chat-code').textContent = chat.code ? `code: ${chat.code}` : '';
+  closeSheet();
+  $('chat-title').textContent = chatLabel(chat);
+  $('chat-sub').textContent = chat.is_direct
+    ? (online.has(chat.other_user_id) ? 'online' : 'offline')
+    : (chat.code ? `group · code ${chat.code}` : 'group');
+  const avatar = avatarFor(chatLabel(chat), null);
+  avatar.id = 'chat-avatar';
+  $('chat-avatar').replaceWith(avatar);
   $('messages').innerHTML = '';
   $('emoji-picker').classList.add('hidden');
   showScreen('screen-chat');
@@ -238,7 +408,7 @@ async function openChat(chat) {
     const history = await api(`/api/rooms/${chat.id}/messages`);
     for (const m of history) appendMessage(m);
   } catch (err) {
-    $('chat-title').textContent = err.message;
+    $('chat-sub').textContent = err.message;
   }
 }
 
@@ -380,7 +550,7 @@ $('form-send').addEventListener('submit', (e) => {
   sendMessage('text', text);
 });
 
-// ---------- images ----------
+// ---------- photos & videos ----------
 $('image-input').addEventListener('change', async () => {
   const file = $('image-input').files[0];
   $('image-input').value = '';
@@ -480,11 +650,13 @@ function connectSocket() {
   socket.on('online_list', (ids) => {
     online.clear();
     ids.forEach((id) => online.add(id));
-    renderChats();
+    renderHome();
+    refreshChatSub();
   });
   socket.on('presence', ({ userId, online: isOnline }) => {
     if (isOnline) online.add(userId); else online.delete(userId);
-    renderChats();
+    renderHome();
+    refreshChatSub();
   });
   socket.on('chat_added', () => {
     socket.emit('sync_rooms');
@@ -504,6 +676,7 @@ function connectSocket() {
       pending.delete(m.temp_id);
     }
     if (currentRoom && m.room_id === currentRoom.id) appendMessage(m);
+    loadChats(); // keeps previews, ordering and unread badges current
   });
   socket.on('media', (p) => {
     if (!/^data:(image|video)\//.test(p.data || '')) return;
@@ -511,6 +684,11 @@ function connectSocket() {
     const bubble = findBubble(p.markerId);
     if (bubble) styleBubbleViewable(bubble); // marker may render before or after media arrives
   });
+}
+
+function refreshChatSub() {
+  if (!currentRoom || !currentRoom.is_direct) return;
+  $('chat-sub').textContent = online.has(currentRoom.other_user_id) ? 'online' : 'offline';
 }
 
 // ---------- boot ----------

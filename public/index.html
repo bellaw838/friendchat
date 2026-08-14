@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#075e54">
   <title>FriendsChat</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -10,59 +11,75 @@
   <div id="conn-banner" class="hidden">connecting…</div>
 
   <div id="screen-auth" class="screen">
-    <h1>💬 FriendsChat</h1>
-    <form id="auth-form" class="card">
-      <input id="auth-username" placeholder="username" autocomplete="username" maxlength="20" required>
-      <input id="auth-password" type="password" placeholder="password (8+ characters)" autocomplete="current-password" required>
-      <p id="auth-error" class="error"></p>
-      <button type="submit">Log in</button>
-      <button type="button" id="btn-signup" class="secondary">Sign up</button>
-    </form>
+    <div class="auth-wrap">
+      <div class="auth-logo">💬</div>
+      <h1>FriendsChat</h1>
+      <p class="auth-tag">Private chats, just for your friends.</p>
+      <form id="auth-form" class="card">
+        <input id="auth-username" placeholder="username" autocomplete="username" maxlength="20" required>
+        <input id="auth-password" type="password" placeholder="password (8+ characters)" autocomplete="current-password" required>
+        <p id="auth-error" class="error"></p>
+        <button type="submit">Log in</button>
+        <button type="button" id="btn-signup" class="secondary">Create an account</button>
+      </form>
+    </div>
   </div>
 
   <div id="screen-home" class="screen hidden">
-    <header>
-      <h1>💬 FriendsChat</h1>
-      <div><b id="home-me"></b> <button id="btn-logout" class="secondary">Log out</button></div>
+    <header class="app-bar">
+      <h1>FriendsChat</h1>
+      <button id="btn-account" class="avatar-btn" title="Account"></button>
     </header>
+    <div class="search-wrap">
+      <input id="search-chats" type="search" placeholder="🔍  Search chats" autocomplete="off">
+    </div>
     <p id="home-error" class="error"></p>
-    <section class="card">
-      <h2>Friends</h2>
-      <ul id="list-requests" class="chat-list"></ul>
-      <ul id="list-friends" class="chat-list"></ul>
-      <form id="form-add-friend" class="row">
-        <input id="add-friend-username" placeholder="friend's exact username" maxlength="20">
-        <button>Add</button>
-      </form>
-    </section>
-    <section class="card">
-      <h2>Rooms</h2>
-      <ul id="list-rooms" class="chat-list"></ul>
-      <form id="form-new-room" class="row">
-        <input id="new-room-name" placeholder="new room name" maxlength="40">
-        <button>Create</button>
-      </form>
-      <form id="form-join-room" class="row">
-        <input id="join-room-code" placeholder="room code (e.g. X7K2PQ)" maxlength="6">
-        <button>Join</button>
-      </form>
-    </section>
+    <div id="requests-banner" class="hidden"></div>
+    <ul id="chat-list" class="conv-list"></ul>
+    <p id="empty-state" class="empty hidden">
+      No chats yet.<br><span class="muted">Tap <b>+</b> to add a friend or start a group.</span>
+    </p>
+    <button id="fab" title="New chat">+</button>
   </div>
 
   <div id="screen-chat" class="screen hidden">
-    <header>
-      <button id="btn-back" class="secondary">←</button>
-      <h2 id="chat-title"></h2>
-      <span id="chat-code" class="muted"></span>
+    <header class="app-bar chat-bar">
+      <button id="btn-back" class="icon-btn">‹</button>
+      <div id="chat-avatar" class="avatar"></div>
+      <div class="chat-heading">
+        <h2 id="chat-title"></h2>
+        <span id="chat-sub" class="chat-sub"></span>
+      </div>
     </header>
     <div id="messages"></div>
     <div id="emoji-picker" class="hidden"></div>
-    <form id="form-send" class="row">
-      <button type="button" id="btn-emoji" class="secondary">😊</button>
-      <label id="btn-image" class="secondary button-like">🖼️<input type="file" id="image-input" accept="image/*,video/*" hidden></label>
-      <input id="message-input" placeholder="Type a message…" autocomplete="off" maxlength="2000">
-      <button type="submit">Send</button>
+    <form id="form-send" class="composer">
+      <button type="button" id="btn-emoji" class="icon-btn">😊</button>
+      <label id="btn-image" class="icon-btn">📎<input type="file" id="image-input" accept="image/*,video/*" hidden></label>
+      <input id="message-input" placeholder="Message" autocomplete="off" maxlength="2000">
+      <button type="submit" id="btn-send" class="send-btn">➤</button>
     </form>
+  </div>
+
+  <div id="sheet-backdrop" class="hidden"></div>
+  <div id="sheet" class="hidden">
+    <div class="sheet-grip"></div>
+    <div id="sheet-menu">
+      <button class="sheet-item" data-action="friend"><span class="sheet-ico">👤</span><span><b>Add a friend</b><small>By their exact username</small></span></button>
+      <button class="sheet-item" data-action="group"><span class="sheet-ico">👥</span><span><b>Create a group</b><small>Get a code to share</small></span></button>
+      <button class="sheet-item" data-action="join"><span class="sheet-ico">🔗</span><span><b>Join with a code</b><small>Someone sent you 6 letters</small></span></button>
+      <div class="sheet-you">Your username: <b id="sheet-me"></b> <button type="button" id="btn-copy-me" class="copy-btn">copy</button></div>
+    </div>
+    <div id="sheet-form" class="hidden">
+      <button type="button" id="sheet-back" class="icon-btn">‹</button>
+      <h3 id="sheet-title"></h3>
+      <form id="sheet-action">
+        <input id="sheet-input" autocomplete="off">
+        <p id="sheet-error" class="error"></p>
+        <button type="submit" id="sheet-submit"></button>
+      </form>
+      <ul id="sheet-friends" class="conv-list"></ul>
+    </div>
   </div>
 
   <div id="media-viewer" class="hidden">
@@ -75,7 +92,7 @@
                 transform="rotate(-90 18 18)"/>
       </svg>
       <span id="ring-secs">30</span>
-      <button id="viewer-close" class="secondary" type="button">✕</button>
+      <button id="viewer-close" class="icon-btn">✕</button>
     </div>
     <div id="viewer-content"></div>
   </div>

@@ -64,7 +64,9 @@ function roomRoutes(db, io) {
     if (!db.isMember(roomId, req.session.userId)) {
       return res.status(403).json({ error: 'Not a member of this chat' });
     }
-    res.json(db.listMessages(roomId, 50));
+    const messages = db.listMessages(roomId, 50);
+    db.markRoomRead(roomId, req.session.userId); // opening a chat clears its badge
+    res.json(messages);
   });
 
   return router;
