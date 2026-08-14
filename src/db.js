@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   is_bot INTEGER NOT NULL DEFAULT 0,
+  email TEXT,
+  phone TEXT,
+  verified INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS rooms (
@@ -29,12 +32,28 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
+CREATE TABLE IF NOT EXISTS friendships (
+  user_lo INTEGER NOT NULL REFERENCES users(id),
+  user_hi INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL CHECK (status IN ('pending','accepted')),
+  requested_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_lo, user_hi)
+);
 `;
 
 function migrate(db) {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (userCols.length && !userCols.includes('is_bot')) {
     db.exec("ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0");
+  }
+  const userAdds = [
+    ['email', 'ALTER TABLE users ADD COLUMN email TEXT'],
+    ['phone', 'ALTER TABLE users ADD COLUMN phone TEXT'],
+    ['verified', 'ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 1'],
+  ];
+  for (const [col, ddl] of userAdds) {
+    if (userCols.length && !userCols.includes(col)) db.exec(ddl);
   }
   const tbl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'").get();
   if (tbl && !tbl.sql.includes('media_note')) {
@@ -128,6 +147,49 @@ function createDb(filename = process.env.DB_PATH || 'data.db') {
           WHERE m.room_id = ? ORDER BY m.id DESC LIMIT ?
         ) ORDER BY id ASC
       `).all(roomId, limit);
+    },
+    requestFriend(fromId, toId) {
+      if (fromId === toId) throw new Error('cannot friend yourself');
+      const [lo, hi] = fromId < toId ? [fromId, toId] : [toId, fromId];
+      const row = db.prepare('SELECT * FROM friendships WHERE user_lo = ? AND user_hi = ?').get(lo, hi);
+      if (!row) {
+        db.prepare("INSERT INTO friendships (user_lo, user_hi, status, requested_by) VALUES (?, ?, 'pending', ?)")
+          .run(lo, hi, fromId);
+        return { status: 'pending' };
+      }
+      if (row.status === 'accepted') return { status: 'accepted', already: true };
+      if (row.requested_by === fromId) return { status: 'pending', already: true };
+      db.prepare("UPDATE friendships SET status = 'accepted' WHERE user_lo = ? AND user_hi = ?").run(lo, hi);
+      return { status: 'accepted' };
+    },
+    respondFriend(userId, otherId, accept) {
+      const [lo, hi] = userId < otherId ? [userId, otherId] : [otherId, userId];
+      const row = db.prepare("SELECT * FROM friendships WHERE user_lo = ? AND user_hi = ? AND status = 'pending'").get(lo, hi);
+      if (!row || row.requested_by === userId) return false;
+      if (accept) {
+        db.prepare("UPDATE friendships SET status = 'accepted' WHERE user_lo = ? AND user_hi = ?").run(lo, hi);
+      } else {
+        db.prepare('DELETE FROM friendships WHERE user_lo = ? AND user_hi = ?').run(lo, hi);
+      }
+      return true;
+    },
+    removeFriend(userId, otherId) {
+      const [lo, hi] = userId < otherId ? [userId, otherId] : [otherId, userId];
+      db.prepare('DELETE FROM friendships WHERE user_lo = ? AND user_hi = ?').run(lo, hi);
+    },
+    areFriends(a, b) {
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      return !!db.prepare("SELECT 1 FROM friendships WHERE user_lo = ? AND user_hi = ? AND status = 'accepted'").get(lo, hi);
+    },
+    listFriends(userId) {
+      return db.prepare(`
+        SELECT CASE WHEN f.user_lo = ? THEN f.user_hi ELSE f.user_lo END AS user_id,
+               u.username, f.status, f.requested_by
+        FROM friendships f
+        JOIN users u ON u.id = CASE WHEN f.user_lo = ? THEN f.user_hi ELSE f.user_lo END
+        WHERE f.user_lo = ? OR f.user_hi = ?
+        ORDER BY u.username
+      `).all(userId, userId, userId, userId);
     },
   };
 }

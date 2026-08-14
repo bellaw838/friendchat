@@ -129,5 +129,71 @@ test('v1 database migrates: image bodies masked, media_note insertable', () => {
   const marker = db.createMessage({ roomId: 1, senderId: 1, kind: 'media_note', body: '📹 video' });
   assert.equal(marker.kind, 'media_note');
 
+  // Phase 2a migration: new user columns arrive with sane defaults, friendships usable
+  assert.equal(db.getUserByUsername('alice').verified, 1);
+  const b2 = db.createUser('bob2', 'x');
+  db.requestFriend(1, b2.id);
+  assert.equal(db.respondFriend(b2.id, 1, true), true);
+  assert.equal(db.areFriends(1, b2.id), true);
+
   for (const suffix of ['', '-wal', '-shm']) fs.rmSync(file + suffix, { force: true });
+});
+
+test('friend requests: pair normalization and mutual-pending auto-accept', () => {
+  const db = createDb(':memory:');
+  const a = db.createUser('alice', 'x');
+  const b = db.createUser('bob', 'x');
+  assert.deepEqual(db.requestFriend(b.id, a.id), { status: 'pending' });
+  assert.equal(db.areFriends(a.id, b.id), false);
+  // duplicate request from same side: still pending, flagged already
+  assert.equal(db.requestFriend(b.id, a.id).already, true);
+  // reverse request = mutual pending -> auto-accept
+  assert.deepEqual(db.requestFriend(a.id, b.id), { status: 'accepted' });
+  assert.equal(db.areFriends(a.id, b.id), true);
+  assert.equal(db.areFriends(b.id, a.id), true);
+  // requesting an accepted friend: already accepted
+  const again = db.requestFriend(a.id, b.id);
+  assert.equal(again.status, 'accepted');
+  assert.equal(again.already, true);
+  assert.throws(() => db.requestFriend(a.id, a.id));
+});
+
+test('respondFriend: only the addressee can accept or decline', () => {
+  const db = createDb(':memory:');
+  const a = db.createUser('alice', 'x');
+  const b = db.createUser('bob', 'x');
+  db.requestFriend(a.id, b.id);
+  assert.equal(db.respondFriend(a.id, b.id, true), false); // asker cannot self-accept
+  assert.equal(db.respondFriend(b.id, a.id, true), true);
+  assert.equal(db.areFriends(a.id, b.id), true);
+  // decline path
+  const c = db.createUser('cara', 'x');
+  db.requestFriend(a.id, c.id);
+  assert.equal(db.respondFriend(c.id, a.id, false), true);
+  assert.equal(db.areFriends(a.id, c.id), false);
+  assert.equal(db.respondFriend(c.id, a.id, false), false); // nothing left to respond to
+});
+
+test('removeFriend, listFriends buckets, and new user columns', () => {
+  const db = createDb(':memory:');
+  const a = db.createUser('alice', 'x');
+  const b = db.createUser('bob', 'x');
+  const c = db.createUser('cara', 'x');
+  db.requestFriend(a.id, b.id);
+  db.respondFriend(b.id, a.id, true);
+  db.requestFriend(c.id, a.id);
+  const list = db.listFriends(a.id);
+  assert.equal(list.length, 2);
+  const bob = list.find((r) => r.user_id === b.id);
+  assert.equal(bob.status, 'accepted');
+  assert.equal(bob.username, 'bob');
+  const cara = list.find((r) => r.user_id === c.id);
+  assert.equal(cara.status, 'pending');
+  assert.equal(cara.requested_by, c.id);
+  db.removeFriend(b.id, a.id);
+  assert.equal(db.areFriends(a.id, b.id), false);
+  db.removeFriend(b.id, a.id); // idempotent
+  assert.equal(db.getUserByUsername('alice').verified, 1);
+  assert.equal(db.getUserByUsername('alice').email, null);
+  assert.equal(db.getUserByUsername('alice').phone, null);
 });
