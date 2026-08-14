@@ -27,6 +27,8 @@ async function twoUsersInDirect() {
   const resB = await agentB.post('/api/signup').send({ username: 'bob', password: 'password123' }).expect(200);
   const cookieA = resA.headers['set-cookie'][0].split(';')[0];
   const cookieB = resB.headers['set-cookie'][0].split(';')[0];
+  db.requestFriend(resA.body.id, resB.body.id);
+  db.respondFriend(resB.body.id, resA.body.id, true);
   const room = (await agentA.post('/api/directs').send({ username: 'bob' }).expect(200)).body;
   const sockA = connect(port, cookieA);
   const sockB = connect(port, cookieB);

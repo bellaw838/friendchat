@@ -33,12 +33,18 @@ test('create room, join by code', async () => {
 });
 
 test('direct chats: create once, reuse after', async () => {
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app, db } = createServer({ dbFile: ':memory:' });
   const alice = await signedUpAgent(app, 'alice');
   await signedUpAgent(app, 'bob');
 
   await alice.post('/api/directs').send({ username: 'ghost' }).expect(404);
   await alice.post('/api/directs').send({ username: 'alice' }).expect(400);
+
+  const aliceId = db.getUserByUsername('alice').id;
+  const bobId = db.getUserByUsername('bob').id;
+  db.requestFriend(aliceId, bobId);
+  db.respondFriend(bobId, aliceId, true);
+
   const first = (await alice.post('/api/directs').send({ username: 'bob' }).expect(200)).body;
   assert.equal(first.other_username, 'bob');
   const second = (await alice.post('/api/directs').send({ username: 'bob' }).expect(200)).body;

@@ -48,6 +48,9 @@ function roomRoutes(db, io) {
     }
     let room = db.findDirectRoom(req.session.userId, other.id);
     if (!room) {
+      if (!db.areFriends(req.session.userId, other.id)) {
+        return res.status(403).json({ error: 'You need to be friends first' });
+      }
       room = db.createRoom({ isDirect: true });
       db.addMember(room.id, req.session.userId);
       db.addMember(room.id, other.id);
