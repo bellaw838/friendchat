@@ -1,0 +1,386 @@
+<title>FriendsChat — Server Setup Guide</title>
+<style>
+  :root {
+    --ground: #fbfaf8;
+    --surface: #ffffff;
+    --ink: #1b2028;
+    --ink-soft: #5b6472;
+    --line: #e4e0da;
+    --accent: #c25e21;
+    --accent-soft: #fdf1e7;
+    --tip: #2f7267;
+    --tip-soft: #eaf4f1;
+    --warn: #a03a2c;
+    --warn-soft: #fbecea;
+    --term-bg: #182029;
+    --term-ink: #e8e6e1;
+    --term-dim: #8b96a5;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0f1720;
+      --surface: #161f29;
+      --ink: #e6e9ed;
+      --ink-soft: #98a3b1;
+      --line: #26313d;
+      --accent: #e9873f;
+      --accent-soft: #2a1d13;
+      --tip: #63b3a4;
+      --tip-soft: #14241f;
+      --warn: #e08072;
+      --warn-soft: #2a1714;
+      --term-bg: #0a1017;
+      --term-ink: #dfe3e8;
+      --term-dim: #7d8794;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0f1720;
+    --surface: #161f29;
+    --ink: #e6e9ed;
+    --ink-soft: #98a3b1;
+    --line: #26313d;
+    --accent: #e9873f;
+    --accent-soft: #2a1d13;
+    --tip: #63b3a4;
+    --tip-soft: #14241f;
+    --warn: #e08072;
+    --warn-soft: #2a1714;
+    --term-bg: #0a1017;
+    --term-ink: #dfe3e8;
+    --term-dim: #7d8794;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 17px; line-height: 1.65;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 47rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 6vw, 2.9rem); line-height: 1.1; margin: 0 0 1rem;
+    letter-spacing: -.02em; text-wrap: balance; font-weight: 700;
+  }
+  .lede { font-size: 1.12rem; color: var(--ink-soft); margin: 0 0 2rem; max-width: 40rem; }
+
+  h2 {
+    font-size: 1.32rem; letter-spacing: -.01em; margin: 3.2rem 0 1rem;
+    padding-top: 1.4rem; border-top: 1px solid var(--line); text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--mono); font-size: .82rem; color: var(--accent);
+    display: inline-block; min-width: 2.4rem; font-weight: 500;
+  }
+  h3 { font-size: 1.02rem; margin: 1.8rem 0 .5rem; }
+  p { margin: 0 0 1rem; }
+  a { color: var(--accent); }
+  ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+  li { margin-bottom: .45rem; }
+  strong, b { font-weight: 650; }
+
+  code {
+    font-family: var(--mono); font-size: .87em;
+    background: var(--accent-soft); color: var(--accent);
+    padding: .12em .38em; border-radius: 4px; word-break: break-word;
+  }
+  kbd {
+    font-family: var(--mono); font-size: .8em; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 4px; padding: .1em .4em; background: var(--surface);
+  }
+  pre {
+    background: var(--term-bg); color: var(--term-ink); font-family: var(--mono);
+    font-size: .84rem; line-height: 1.7; padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0 0 1.2rem;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: 1em; }
+  pre .c { color: var(--term-dim); }
+
+  .box {
+    border-left: 3px solid; border-radius: 0 8px 8px 0;
+    padding: .95rem 1.1rem; margin: 0 0 1.4rem; font-size: .95rem;
+  }
+  .box p:last-child { margin-bottom: 0; }
+  .tip { border-color: var(--tip); background: var(--tip-soft); }
+  .tip b { color: var(--tip); }
+  .warn { border-color: var(--warn); background: var(--warn-soft); }
+  .warn b { color: var(--warn); }
+
+  .tbl { overflow-x: auto; margin: 0 0 1.4rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; min-width: 30rem; }
+  th, td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); font-weight: 600; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding-left: 1.7rem; position: relative; }
+  .checklist li::before {
+    content: "☐"; position: absolute; left: 0; color: var(--accent); font-size: 1.1rem;
+  }
+  footer { margin-top: 3.5rem; padding-top: 1.4rem; border-top: 1px solid var(--line);
+           color: var(--ink-soft); font-size: .88rem; }
+</style>
+
+<div class="wrap">
+
+<p class="eyebrow">FriendsChat · Deployment</p>
+<h1>Putting FriendsChat on your own server</h1>
+<p class="lede">A checklist for after someone hands you SSH access to an AWS machine.
+Written so you can follow it yourself — though you can also ask Claude to do any step
+with you. Read what each command does before running it: on your own server there is no
+undo button.</p>
+
+<div class="box tip">
+  <p><b>The short answer to your question.</b> One machine runs everything — the app, the
+  database, and the web server that provides HTTPS. You do not need Render, Neon, or any
+  other hosting service. Two things still live outside it: a <b>domain name</b>
+  (about £10/year) for a real web address, and <b>backups</b>, which must be copied off
+  the machine or they die with it.</p>
+</div>
+
+<h2><span class="num">00</span>What to ask for</h2>
+<p>When the person buying the server asks what you need, this is the answer:</p>
+<div class="tbl">
+<table>
+  <tr><th>Setting</th><th>Ask for</th><th>Why it matters</th></tr>
+  <tr><td>Service</td><td>AWS Lightsail, not EC2</td><td>Same machine underneath, far simpler screens and a fixed monthly price</td></tr>
+  <tr><td>Size</td><td>1&nbsp;GB RAM, about $7/mo</td><td>The $5 / 512&nbsp;MB plan runs out of memory during installs</td></tr>
+  <tr><td>System</td><td>Ubuntu 24.04 LTS</td><td>“LTS” means security support for years, and it is the most documented choice</td></tr>
+  <tr><td>Region</td><td>Nearest you and your friends</td><td>Shorter distance, faster messages</td></tr>
+  <tr><td>Static IP</td><td>Yes — attach one</td><td>Without it the address changes on reboot and your link breaks</td></tr>
+  <tr><td>Access</td><td>The <code>.pem</code> key file and username</td><td>Your key to the door. The user is normally <code>ubuntu</code>.</td></tr>
+</table>
+</div>
+
+<div class="box warn">
+  <p><b>About wanting root and a normal user.</b> Ubuntu gives you one normal user
+  (<code>ubuntu</code>) who becomes root on demand with <code>sudo</code>. That is the safe
+  arrangement — logging in directly as root is how servers get destroyed by one mistyped
+  command. If you are handed a root password, step 03 turns that login off.</p>
+</div>
+
+<h2><span class="num">01</span>Protect the key, then log in</h2>
+<p>You will be given a file like <code>friendschat.pem</code>. It <em>is</em> the password to
+the machine — anyone holding it can log in as you. Never email it, never commit it to GitHub.</p>
+<pre><code>mkdir -p ~/.ssh
+mv ~/Downloads/friendschat.pem ~/.ssh/
+chmod 600 ~/.ssh/friendschat.pem   <span class="c"># only you can read it</span>
+
+ssh -i ~/.ssh/friendschat.pem ubuntu@YOUR.SERVER.IP</code></pre>
+<p>SSH refuses to use a key other people on the computer could read — that is what
+<code>chmod 600</code> fixes. The first connection asks whether to trust the machine; type
+<code>yes</code>. It is recording a fingerprint so it can warn you if you ever reach an
+impostor later.</p>
+<p>To stop typing all that, add this to <code>~/.ssh/config</code> on your Mac and afterwards
+just run <code>ssh friendschat</code>:</p>
+<pre><code>Host friendschat
+  HostName YOUR.SERVER.IP
+  User ubuntu
+  IdentityFile ~/.ssh/friendschat.pem</code></pre>
+
+<h2><span class="num">02</span>Update everything</h2>
+<pre><code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></pre>
+<p>This pulls the latest security fixes, and repeating it every few weeks is the single most
+important habit for keeping a server safe. If it tells you a reboot is required, run
+<code>sudo reboot</code>, wait a minute, and connect again.</p>
+
+<h2><span class="num">03</span>Lock the front door</h2>
+<p>Machines on the internet start receiving automated break-in attempts within minutes of
+going live. Three defences, in order:</p>
+<pre><code><span class="c"># 1 — firewall: allow only SSH and web traffic</span>
+sudo ufw allow OpenSSH
+sudo ufw allow 80,443/tcp
+sudo ufw enable
+
+<span class="c"># 2 — keys only, no passwords, no root</span>
+sudo nano /etc/ssh/sshd_config</code></pre>
+<p>Make these three lines read exactly this, then save with <kbd>Ctrl</kbd>+<kbd>O</kbd>,
+<kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd>:</p>
+<pre><code>PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes</code></pre>
+<pre><code>sudo systemctl restart ssh
+
+<span class="c"># 3 — ban repeated failed attempts automatically</span>
+sudo apt install -y fail2ban
+sudo systemctl enable --now fail2ban</code></pre>
+<div class="box warn">
+  <p><b>Keep this terminal open.</b> Open a <em>second</em> terminal and confirm you can
+  still log in. If you have just locked yourself out, the window still open is how you undo
+  it. If both are closed, use Lightsail’s browser console to get back in.</p>
+</div>
+
+<h2><span class="num">04</span>Install the software</h2>
+<pre><code><span class="c"># Node.js 20 — the app needs 18 or newer</span>
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+<span class="c"># PostgreSQL — the database that survives restarts</span>
+sudo apt install -y postgresql
+
+<span class="c"># Nginx — terminates HTTPS and forwards to the app</span>
+sudo apt install -y nginx
+
+node -v &amp;&amp; psql --version &amp;&amp; nginx -v   <span class="c"># all three should answer</span></code></pre>
+
+<h2><span class="num">05</span>Create the database</h2>
+<pre><code>sudo -u postgres psql</code></pre>
+<p>That opens the database’s own prompt. Type these four lines, choosing a long random
+password and writing it down — step 06 needs it:</p>
+<pre><code>CREATE DATABASE friendschat;
+CREATE USER friendschat WITH PASSWORD 'your-long-random-password';
+GRANT ALL PRIVILEGES ON DATABASE friendschat TO friendschat;
+\q</code></pre>
+<p>By default Postgres listens only to programs on this same machine, not to the internet.
+That is exactly what we want, so there is nothing to change.</p>
+
+<h2><span class="num">06</span>Put the app on the server</h2>
+<pre><code>cd ~
+git clone https://github.com/bellaw838/friendchat.git
+cd friendchat
+npm install --omit=dev
+
+nano ~/friendchat/.env</code></pre>
+<pre><code>NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgres://friendschat:your-long-random-password@localhost:5432/friendschat
+SESSION_SECRET=paste-a-long-random-string</code></pre>
+<p>Generate that secret with <code>openssl rand -hex 32</code>. It signs the login cookies, so
+if it leaks someone could forge logins. The <code>.env</code> file never goes into GitHub.</p>
+<div class="box warn">
+  <p><b>One prerequisite is not built yet.</b> The app still stores data in a SQLite file, so
+  <code>DATABASE_URL</code> does nothing until the Postgres rewrite is done — that is the
+  “Phase 1” work to ask Claude for. Everything else on this page works today, and the
+  rewrite changes only <code>src/db.js</code>.</p>
+</div>
+
+<h2><span class="num">07</span>Keep it running forever</h2>
+<p>Typing <code>npm start</code> means the app dies the moment you close the terminal. This
+registers it as a system service instead — started at boot, restarted after a crash:</p>
+<pre><code>sudo nano /etc/systemd/system/friendschat.service</code></pre>
+<pre><code>[Unit]
+Description=FriendsChat
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/friendchat
+EnvironmentFile=/home/ubuntu/friendchat/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now friendschat
+sudo systemctl status friendschat        <span class="c"># expect "active (running)"</span></code></pre>
+<p>Two commands worth memorising: <code>sudo systemctl restart friendschat</code> after
+changing code, and <code>journalctl -u friendschat -f</code> to watch the live log when
+something misbehaves.</p>
+
+<h2><span class="num">08</span>A real address, with HTTPS</h2>
+<p>Buy a domain (Namecheap or Cloudflare, roughly £10/year) and point an <b>A record</b> at
+your server’s IP. Then put Nginx in front of the app:</p>
+<pre><code>sudo nano /etc/nginx/sites-available/friendschat</code></pre>
+<pre><code>server {
+    server_name yourdomain.com;
+    client_max_body_size 20M;   <span class="c"># room for 10 MB videos</span>
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;    <span class="c"># these two lines</span>
+        proxy_set_header Connection "upgrade";     <span class="c"># keep live chat alive</span>
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}</code></pre>
+<pre><code>sudo ln -s /etc/nginx/sites-available/friendschat /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx
+
+<span class="c"># free certificate, renews itself</span>
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com</code></pre>
+<div class="box tip">
+  <p><b>The two lines everyone forgets.</b> Without the <code>Upgrade</code> headers the page
+  loads perfectly but messages never arrive live — because the WebSocket connection that
+  carries chat gets dropped at the proxy. If FriendsChat ever loads but feels dead, look here
+  first.</p>
+</div>
+
+<h2><span class="num">09</span>Backups — the step people regret skipping</h2>
+<p>A backup stored on the same machine dies with the machine. This keeps fourteen days of
+history locally, and you copy them to your Mac regularly:</p>
+<pre><code>mkdir -p ~/backups
+nano ~/backup-db.sh</code></pre>
+<pre><code>#!/bin/bash
+export PGPASSWORD='your-long-random-password'
+pg_dump -U friendschat -h localhost friendschat \
+  | gzip &gt; ~/backups/friendschat-$(date +%F).sql.gz
+find ~/backups -name '*.sql.gz' -mtime +14 -delete</code></pre>
+<pre><code>chmod +x ~/backup-db.sh
+crontab -e
+<span class="c"># add this line — 3am nightly</span>
+0 3 * * * /home/ubuntu/backup-db.sh</code></pre>
+<p>Then from <em>your Mac</em>, pull copies down:</p>
+<pre><code>scp -i ~/.ssh/friendschat.pem 'ubuntu@YOUR.SERVER.IP:~/backups/*.gz' ~/Desktop/</code></pre>
+<p>A backup you have never restored is only a hope. Once, open one and check it contains real
+data: <code>zcat friendschat-2026-08-15.sql.gz | head -40</code>.</p>
+
+<h2><span class="num">10</span>Set a billing alarm today</h2>
+<p>In the AWS console: <b>Billing → Budgets → Create budget</b>. Set a monthly limit near
+your expected cost with an email alert. Lightsail is a fixed price, so this is really a
+tripwire for anything accidentally left running elsewhere in the account. Do it on day one,
+not after the first surprise.</p>
+
+<h2>Updating the app later</h2>
+<pre><code>ssh friendschat
+cd ~/friendchat
+git pull
+npm install --omit=dev
+sudo systemctl restart friendschat</code></pre>
+
+<h2>When something breaks</h2>
+<div class="tbl">
+<table>
+  <tr><th>What you see</th><th>Where to look</th></tr>
+  <tr><td>Nothing loads</td><td><code>sudo systemctl status friendschat</code>, then <code>journalctl -u friendschat -n 50</code></td></tr>
+  <tr><td>502 Bad Gateway</td><td>Nginx is up but the app is down — restart it and read the log</td></tr>
+  <tr><td>Loads, but no live messages</td><td>The two <code>Upgrade</code> lines in the Nginx config</td></tr>
+  <tr><td>Everyone logged out</td><td><code>SESSION_SECRET</code> changed, or Postgres is not running</td></tr>
+  <tr><td>Locked out of SSH</td><td>Lightsail console → “Connect using SSH” in the browser</td></tr>
+  <tr><td>Disk full</td><td><code>df -h</code>, then clear old backups and <code>sudo apt clean</code></td></tr>
+</table>
+</div>
+
+<h2>Your ongoing jobs</h2>
+<ul class="checklist">
+  <li><b>Every few weeks</b> — <code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></li>
+  <li><b>Monthly</b> — copy backups to your Mac, and open one to confirm it holds real data</li>
+  <li><b>Yearly</b> — renew the domain before it expires</li>
+  <li><b>Never</b> — share the <code>.pem</code> key, or commit <code>.env</code> to GitHub</li>
+</ul>
+
+<div class="box tip">
+  <p><b>Owning the machine means owning the problems.</b> That is the trade you chose, and it
+  is a genuinely good way to learn how the internet actually works. Nothing here is beyond
+  you — just take the steps in order, and keep that second terminal open during step 03.</p>
+</div>
+
+<footer>
+  FriendsChat · written for <code>github.com/bellaw838/friendchat</code> · commands assume
+  Ubuntu 24.04 on AWS Lightsail
+</footer>
+
+</div>
