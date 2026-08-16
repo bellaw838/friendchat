@@ -1,9 +1,20 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
 const { io } = require('socket.io-client');
 const { createServer } = require('../src/server');
+const { withSchema, dropSchema } = require('../src/pool');
 const agents = require('../src/agents');
+
+const SCHEMA = `test_media_${process.pid}`;
+let pool;
+before(async () => { pool = await withSchema(SCHEMA); });
+after(async () => { await pool.end(); await dropSchema(SCHEMA); });
+
+async function freshServer() {
+  await pool.query('TRUNCATE room_reads, friendships, messages, room_members, rooms, users RESTART IDENTITY CASCADE');
+  return createServer({ pool });
+}
 
 function waitFor(socket, event) {
   return new Promise((resolve) => socket.once(event, resolve));
@@ -18,7 +29,7 @@ function connect(port, cookie) {
 }
 
 async function twoUsersInDirect() {
-  const { app, httpServer, db } = createServer({ dbFile: ':memory:' });
+  const { app, httpServer, db } = await freshServer();
   await new Promise((r) => httpServer.listen(0, r));
   const port = httpServer.address().port;
   const agentA = request.agent(app);
@@ -27,8 +38,8 @@ async function twoUsersInDirect() {
   const resB = await agentB.post('/api/signup').send({ username: 'bob', password: 'password123' }).expect(200);
   const cookieA = resA.headers['set-cookie'][0].split(';')[0];
   const cookieB = resB.headers['set-cookie'][0].split(';')[0];
-  db.requestFriend(resA.body.id, resB.body.id);
-  db.respondFriend(resB.body.id, resA.body.id, true);
+  await db.requestFriend(resA.body.id, resB.body.id);
+  await db.respondFriend(resB.body.id, resA.body.id, true);
   const room = (await agentA.post('/api/directs').send({ username: 'bob' }).expect(200)).body;
   const sockA = connect(port, cookieA);
   const sockB = connect(port, cookieB);
@@ -72,7 +83,7 @@ test('photo relays to online member, marker persists, media bytes never stored',
     await new Promise((r) => setTimeout(r, 200));
     assert.equal(senderGotMedia, false, 'sender must not receive media echo');
 
-    const history = db.listMessages(room.id, 50);
+    const history = await db.listMessages(room.id, 50);
     assert.equal(history.length, 1);
     assert.equal(history[0].body, '📷 photo');
     assert.ok(!JSON.stringify(history).includes('base64'), 'no media bytes in db');

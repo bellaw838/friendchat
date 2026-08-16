@@ -1,8 +1,19 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
 const { io } = require('socket.io-client');
 const { createServer } = require('../src/server');
+const { withSchema, dropSchema } = require('../src/pool');
+
+const SCHEMA = `test_socket_${process.pid}`;
+let pool;
+before(async () => { pool = await withSchema(SCHEMA); });
+after(async () => { await pool.end(); await dropSchema(SCHEMA); });
+
+async function freshServer() {
+  await pool.query('TRUNCATE room_reads, friendships, messages, room_members, rooms, users RESTART IDENTITY CASCADE');
+  return createServer({ pool });
+}
 
 function waitFor(socket, event) {
   return new Promise((resolve) => socket.once(event, resolve));
@@ -17,7 +28,7 @@ function connect(port, cookie) {
 }
 
 test('real-time message delivery between two users', async () => {
-  const { app, httpServer, db } = createServer({ dbFile: ':memory:' });
+  const { app, httpServer, db } = await freshServer();
   await new Promise((r) => httpServer.listen(0, r));
   const port = httpServer.address().port;
 
@@ -27,8 +38,8 @@ test('real-time message delivery between two users', async () => {
   const resB = await agentB.post('/api/signup').send({ username: 'bob', password: 'password123' }).expect(200);
   const cookieA = resA.headers['set-cookie'][0].split(';')[0];
   const cookieB = resB.headers['set-cookie'][0].split(';')[0];
-  db.requestFriend(resA.body.id, resB.body.id);
-  db.respondFriend(resB.body.id, resA.body.id, true);
+  await db.requestFriend(resA.body.id, resB.body.id);
+  await db.respondFriend(resB.body.id, resA.body.id, true);
   const room = (await agentA.post('/api/directs').send({ username: 'bob' }).expect(200)).body;
 
   const sockA = connect(port, cookieA);
@@ -57,7 +68,7 @@ test('real-time message delivery between two users', async () => {
 });
 
 test('online user is notified in real time when a new direct chat is created', async () => {
-  const { app, httpServer, db } = createServer({ dbFile: ':memory:' });
+  const { app, httpServer, db } = await freshServer();
   await new Promise((r) => httpServer.listen(0, r));
   const port = httpServer.address().port;
 
@@ -67,8 +78,8 @@ test('online user is notified in real time when a new direct chat is created', a
   const resB = await agentB.post('/api/signup').send({ username: 'bob', password: 'password123' }).expect(200);
   const cookieA = resA.headers['set-cookie'][0].split(';')[0];
   const cookieB = resB.headers['set-cookie'][0].split(';')[0];
-  db.requestFriend(resA.body.id, resB.body.id);
-  db.respondFriend(resB.body.id, resA.body.id, true);
+  await db.requestFriend(resA.body.id, resB.body.id);
+  await db.respondFriend(resB.body.id, resA.body.id, true);
 
   // Connect both sockets BEFORE any direct room exists.
   const sockA = connect(port, cookieA);
@@ -103,7 +114,7 @@ test('online user is notified in real time when a new direct chat is created', a
 });
 
 test('unauthenticated sockets are rejected', async () => {
-  const { httpServer } = createServer({ dbFile: ':memory:' });
+  const { httpServer } = await freshServer();
   await new Promise((r) => httpServer.listen(0, r));
   const port = httpServer.address().port;
   const sock = io(`http://localhost:${port}`, { transports: ['polling'], forceNew: true });

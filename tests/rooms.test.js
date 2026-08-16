@@ -1,7 +1,18 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
 const { createServer } = require('../src/server');
+const { withSchema, dropSchema } = require('../src/pool');
+
+const SCHEMA = `test_rooms_${process.pid}`;
+let pool;
+before(async () => { pool = await withSchema(SCHEMA); });
+after(async () => { await pool.end(); await dropSchema(SCHEMA); });
+
+async function freshServer() {
+  await pool.query('TRUNCATE room_reads, friendships, messages, room_members, rooms, users RESTART IDENTITY CASCADE');
+  return createServer({ pool });
+}
 
 async function signedUpAgent(app, username) {
   const agent = request.agent(app);
@@ -10,13 +21,13 @@ async function signedUpAgent(app, username) {
 }
 
 test('chat endpoints require login', async () => {
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   await request(app).get('/api/chats').expect(401);
   await request(app).post('/api/rooms').send({ name: 'x' }).expect(401);
 });
 
 test('create room, join by code', async () => {
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   const bob = await signedUpAgent(app, 'bob');
 
@@ -33,17 +44,17 @@ test('create room, join by code', async () => {
 });
 
 test('direct chats: create once, reuse after', async () => {
-  const { app, db } = createServer({ dbFile: ':memory:' });
+  const { app, db } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   await signedUpAgent(app, 'bob');
 
   await alice.post('/api/directs').send({ username: 'ghost' }).expect(404);
   await alice.post('/api/directs').send({ username: 'alice' }).expect(400);
 
-  const aliceId = db.getUserByUsername('alice').id;
-  const bobId = db.getUserByUsername('bob').id;
-  db.requestFriend(aliceId, bobId);
-  db.respondFriend(bobId, aliceId, true);
+  const aliceId = (await db.getUserByUsername('alice')).id;
+  const bobId = (await db.getUserByUsername('bob')).id;
+  await db.requestFriend(aliceId, bobId);
+  await db.respondFriend(bobId, aliceId, true);
 
   const first = (await alice.post('/api/directs').send({ username: 'bob' }).expect(200)).body;
   assert.equal(first.other_username, 'bob');
@@ -52,7 +63,7 @@ test('direct chats: create once, reuse after', async () => {
 });
 
 test('message history is members-only', async () => {
-  const { app, db } = createServer({ dbFile: ':memory:' });
+  const { app, db } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   const bob = await signedUpAgent(app, 'bob');
   const room = (await alice.post('/api/rooms').send({ name: 'secret' }).expect(200)).body;
@@ -61,7 +72,8 @@ test('message history is members-only', async () => {
   const empty = (await alice.get(`/api/rooms/${room.id}/messages`).expect(200)).body;
   assert.deepEqual(empty, []);
 
-  db.createMessage({ roomId: room.id, senderId: 1, kind: 'text', body: 'hello 🎉' });
+  const aliceId = (await db.getUserByUsername('alice')).id;
+  await db.createMessage({ roomId: room.id, senderId: aliceId, kind: 'text', body: 'hello 🎉' });
   const msgs = (await alice.get(`/api/rooms/${room.id}/messages`).expect(200)).body;
   assert.equal(msgs.length, 1);
   assert.equal(msgs[0].body, 'hello 🎉');

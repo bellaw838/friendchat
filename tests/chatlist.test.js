@@ -1,7 +1,18 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
 const { createServer } = require('../src/server');
+const { withSchema, dropSchema } = require('../src/pool');
+
+const SCHEMA = `test_chatlist_${process.pid}`;
+let pool;
+before(async () => { pool = await withSchema(SCHEMA); });
+after(async () => { await pool.end(); await dropSchema(SCHEMA); });
+
+async function freshServer() {
+  await pool.query('TRUNCATE room_reads, friendships, messages, room_members, rooms, users RESTART IDENTITY CASCADE');
+  return createServer({ pool });
+}
 
 async function signedUpAgent(app, username) {
   const agent = request.agent(app);
@@ -12,7 +23,7 @@ async function signedUpAgent(app, username) {
 
 // alice and bob, friends, with a direct room between them
 async function twoFriends() {
-  const { app, db } = createServer({ dbFile: ':memory:' });
+  const { app, db } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   const bob = await signedUpAgent(app, 'bob');
   await alice.post('/api/friends/request').send({ username: 'bob' }).expect(200);
@@ -30,8 +41,8 @@ test('chat list carries last-message preview, sender and time', async () => {
   assert.equal(empty.last_body, null, 'a room with no messages has no preview');
   assert.equal(empty.unread, 0);
 
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'first' });
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'hello bob!' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'first' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'hello bob!' });
 
   const chat = (await chatsOf(bob))[0];
   assert.equal(chat.last_body, 'hello bob!', 'preview is the newest message');
@@ -43,8 +54,8 @@ test('chat list carries last-message preview, sender and time', async () => {
 test('unread counts only the other person messages, and clears on opening', async () => {
   const { db, alice, bob, room } = await twoFriends();
 
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'one' });
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'two' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'one' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'two' });
 
   assert.equal((await chatsOf(bob))[0].unread, 2, 'bob has two unread');
   assert.equal((await chatsOf(alice))[0].unread, 0, 'your own messages are never unread');
@@ -52,7 +63,7 @@ test('unread counts only the other person messages, and clears on opening', asyn
   await bob.get(`/api/rooms/${room.id}/messages`).expect(200); // opening the chat
   assert.equal((await chatsOf(bob))[0].unread, 0, 'opening clears the badge');
 
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'three' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'three' });
   assert.equal((await chatsOf(bob))[0].unread, 1, 'later messages count again');
 });
 
@@ -60,10 +71,10 @@ test('chat list is ordered by most recent activity', async () => {
   const { db, alice, bob, room } = await twoFriends();
   const group = (await alice.post('/api/rooms').send({ name: 'Homework' }).expect(200)).body;
 
-  db.createMessage({ roomId: room.id, senderId: bob.id, kind: 'text', body: 'in the direct' });
+  await db.createMessage({ roomId: room.id, senderId: bob.id, kind: 'text', body: 'in the direct' });
   assert.equal((await chatsOf(alice))[0].is_direct, 1, 'direct chat is on top after its message');
 
-  db.createMessage({ roomId: group.id, senderId: alice.id, kind: 'text', body: 'in the group' });
+  await db.createMessage({ roomId: group.id, senderId: alice.id, kind: 'text', body: 'in the group' });
   const list = await chatsOf(alice);
   assert.equal(list[0].id, group.id, 'group jumps to the top after newer activity');
   assert.equal(list[1].id, room.id);
@@ -72,10 +83,10 @@ test('chat list is ordered by most recent activity', async () => {
 test('media markers preview without leaking media, legacy images stay masked', async () => {
   const { db, alice, bob, room } = await twoFriends();
 
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'media_note', body: '📷 photo' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'media_note', body: '📷 photo' });
   assert.equal((await chatsOf(bob))[0].last_body, '📷 photo');
 
-  db.createMessage({
+  await db.createMessage({
     roomId: room.id, senderId: alice.id, kind: 'image',
     body: 'data:image/jpeg;base64,SECRETBYTES',
   });
@@ -88,10 +99,10 @@ test('marking read is per-user and per-room', async () => {
   const { db, alice, bob, room } = await twoFriends();
   const group = (await alice.post('/api/rooms').send({ name: 'Homework' }).expect(200)).body;
   await alice.post('/api/friends/request').send({ username: 'bob' }).catch(() => {});
-  db.addMember(group.id, bob.id);
+  await db.addMember(group.id, bob.id);
 
-  db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'direct msg' });
-  db.createMessage({ roomId: group.id, senderId: alice.id, kind: 'text', body: 'group msg' });
+  await db.createMessage({ roomId: room.id, senderId: alice.id, kind: 'text', body: 'direct msg' });
+  await db.createMessage({ roomId: group.id, senderId: alice.id, kind: 'text', body: 'group msg' });
 
   await bob.get(`/api/rooms/${room.id}/messages`).expect(200); // opens only the direct
   const bobList = await chatsOf(bob);

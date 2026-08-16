@@ -1,8 +1,19 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
 const verify = require('../src/verify');
 const { createServer } = require('../src/server');
+const { withSchema, dropSchema } = require('../src/pool');
+
+const SCHEMA = `test_verify_${process.pid}`;
+let pool;
+before(async () => { pool = await withSchema(SCHEMA); });
+after(async () => { await pool.end(); await dropSchema(SCHEMA); });
+
+async function freshServer() {
+  await pool.query('TRUNCATE room_reads, friendships, messages, room_members, rooms, users RESTART IDENTITY CASCADE');
+  return createServer({ pool });
+}
 
 test('verification is off by default and honors the env flag', () => {
   delete process.env.REQUIRE_VERIFICATION;
@@ -20,7 +31,7 @@ test('verification is off by default and honors the env flag', () => {
 
 test('signup works normally with the flag off, 503 with it on', async () => {
   delete process.env.REQUIRE_VERIFICATION;
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   await request.agent(app).post('/api/signup')
     .send({ username: 'bella', password: 'password123' }).expect(200);
   try {

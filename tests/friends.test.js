@@ -1,8 +1,19 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
 const { io } = require('socket.io-client');
 const { createServer } = require('../src/server');
+const { withSchema, dropSchema } = require('../src/pool');
+
+const SCHEMA = `test_friends_${process.pid}`;
+let pool;
+before(async () => { pool = await withSchema(SCHEMA); });
+after(async () => { await pool.end(); await dropSchema(SCHEMA); });
+
+async function freshServer() {
+  await pool.query('TRUNCATE room_reads, friendships, messages, room_members, rooms, users RESTART IDENTITY CASCADE');
+  return createServer({ pool });
+}
 
 async function signedUpAgent(app, username) {
   const agent = request.agent(app);
@@ -12,7 +23,7 @@ async function signedUpAgent(app, username) {
 }
 
 test('full friend flow: request, buckets, accept, unfriend', async () => {
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   const bob = await signedUpAgent(app, 'bob');
 
@@ -41,7 +52,7 @@ test('full friend flow: request, buckets, accept, unfriend', async () => {
 });
 
 test('decline and cancel', async () => {
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   const bob = await signedUpAgent(app, 'bob');
   await alice.post('/api/friends/request').send({ username: 'bob' }).expect(200);
@@ -57,7 +68,7 @@ test('decline and cancel', async () => {
 });
 
 test('directs are friends-gated; existing rooms grandfathered', async () => {
-  const { app, db } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   const alice = await signedUpAgent(app, 'alice');
   const bob = await signedUpAgent(app, 'bob');
 
@@ -77,7 +88,7 @@ test('directs are friends-gated; existing rooms grandfathered', async () => {
 });
 
 test('friends_changed pokes both users over sockets', async () => {
-  const { app, httpServer } = createServer({ dbFile: ':memory:' });
+  const { app, httpServer } = await freshServer();
   await new Promise((r) => httpServer.listen(0, r));
   const port = httpServer.address().port;
   const alice = await signedUpAgent(app, 'alice');
@@ -103,7 +114,7 @@ test('friends_changed pokes both users over sockets', async () => {
 });
 
 test('no friends_changed poke without a real state change', async () => {
-  const { app, httpServer } = createServer({ dbFile: ':memory:' });
+  const { app, httpServer } = await freshServer();
   await new Promise((r) => httpServer.listen(0, r));
   const port = httpServer.address().port;
   const alice = await signedUpAgent(app, 'alice');
@@ -138,7 +149,7 @@ test('no friends_changed poke without a real state change', async () => {
 });
 
 test('friends routes require login', async () => {
-  const { app } = createServer({ dbFile: ':memory:' });
+  const { app } = await freshServer();
   await request(app).get('/api/friends').expect(401);
   await request(app).post('/api/friends/request').send({ username: 'bob' }).expect(401);
   await request(app).post('/api/friends/respond').send({ userId: 1, accept: true }).expect(401);
