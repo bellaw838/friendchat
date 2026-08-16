@@ -25,20 +25,24 @@ function attachSocket(httpServer, sessionMiddleware, db) {
     if (online.get(userId) === 1) io.emit('presence', { userId, online: true });
     socket.emit('online_list', [...online.keys()]);
 
-    const joinRooms = () => {
-      for (const room of db.listRoomsForUser(userId)) socket.join(`room:${room.id}`);
+    const joinRooms = async () => {
+      try {
+        for (const room of await db.listRoomsForUser(userId)) socket.join(`room:${room.id}`);
+      } catch (err) {
+        console.error('joinRooms failed:', err);
+      }
     };
     joinRooms();
     socket.on('sync_rooms', joinRooms);
 
-    socket.on('send_message', (payload, ack = () => {}) => {
+    socket.on('send_message', async (payload, ack = () => {}) => {
       try {
         const { roomId, kind, body, tempId } = payload || {};
-        if (!db.isMember(roomId, userId)) return ack({ error: 'Not a member of this chat' });
+        if (!(await db.isMember(roomId, userId))) return ack({ error: 'Not a member of this chat' });
         if (kind !== 'text') return ack({ error: 'Unknown message type' });
         if (typeof body !== 'string' || !body.trim()) return ack({ error: 'Empty message' });
         if (body.length > MAX_TEXT) return ack({ error: 'Message too long' });
-        const msg = db.createMessage({ roomId, senderId: userId, kind, body });
+        const msg = await db.createMessage({ roomId, senderId: userId, kind, body });
         io.to(`room:${roomId}`).emit('new_message', { ...msg, temp_id: tempId || null });
         ack({ ok: true, id: msg.id });
         try {
@@ -52,10 +56,10 @@ function attachSocket(httpServer, sessionMiddleware, db) {
       }
     });
 
-    socket.on('send_media', (payload, ack = () => {}) => {
+    socket.on('send_media', async (payload, ack = () => {}) => {
       try {
         const { roomId, mediaType, mime, data, tempId } = payload || {};
-        if (!db.isMember(roomId, userId)) return ack({ error: 'Not a member of this chat' });
+        if (!(await db.isMember(roomId, userId))) return ack({ error: 'Not a member of this chat' });
         if (mediaType !== 'photo' && mediaType !== 'video') return ack({ error: 'Unknown media type' });
         if (typeof data !== 'string' || (!data.startsWith('data:image/') && !data.startsWith('data:video/'))) {
           return ack({ error: 'Bad media data' });
@@ -64,7 +68,7 @@ function attachSocket(httpServer, sessionMiddleware, db) {
           return ack({ error: 'Media type mismatch' });
         }
         if (data.length > MAX_MEDIA) return ack({ error: 'Too big — max 10 MB' });
-        const marker = db.createMessage({
+        const marker = await db.createMessage({
           roomId, senderId: userId, kind: 'media_note',
           body: mediaType === 'photo' ? '📷 photo' : '📹 video',
         });
