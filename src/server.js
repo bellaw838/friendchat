@@ -2,6 +2,7 @@ const http = require('http');
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 const { createDb } = require('./db');
 const { getPool, initSchema } = require('./pool');
 const { authRoutes } = require('./auth');
@@ -17,9 +18,12 @@ async function createServer({ pool = getPool() } = {}) {
   app.use(express.json({ limit: '1mb' }));
 
   const sessionMiddleware = session({
+    // Sessions live in Postgres so a restart or crash doesn't log everyone out.
+    store: new pgSession({ pool, tableName: 'user_sessions', createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET || 'dev-only-secret',
     resave: false,
     saveUninitialized: false,
+    rolling: true, // each visit extends the 30 days, so active users stay logged in
     cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', maxAge: 30 * 24 * 3600 * 1000 },
   });
   app.use(sessionMiddleware);
