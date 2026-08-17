@@ -5,13 +5,26 @@ chats, group rooms with join codes, emoji, and disappearing photos/videos — al
 
 ## Run it on your computer
 
+You need PostgreSQL once:
+
 ```bash
+brew install postgresql@16 && brew services start postgresql@16
+createdb friendschat
+```
+
+Then:
+
+```bash
+cp .env.example .env     # then edit DATABASE_URL if your setup differs
 npm install
 npm start
 ```
 
 Open http://localhost:3000. To chat with yourself for testing, open a
 second private/incognito window and sign up as a different user.
+
+Want some test accounts to play with? `node scripts/seed.js` creates ten
+friends (password `test1234`) with a few conversations already going.
 
 ## Run the tests
 
@@ -33,23 +46,41 @@ Honest fine print:
   No chat app can prevent that; make sure your friends know.
 - Videos: up to 15 seconds and 10 MB.
 
-## Put it on the internet (Render, free)
+## Put it on the internet
 
-1. Push this repo to GitHub (private repo is fine).
-2. Sign up at https://render.com (free).
-3. New → Blueprint → connect the repo. Render reads `render.yaml` and
-   deploys automatically.
-4. Share your link (like `https://friendschat.onrender.com`) with friends.
+FriendsChat runs on its own Ubuntu server: Node for the app, PostgreSQL for
+storage, Nginx in front. Accounts, chats and logins survive restarts and
+reboots.
 
-**Free-tier fine print:** the app falls asleep after ~15 minutes with no
-visitors — the first person to open it waits ~30 seconds while it wakes up.
-Accounts and chat history reset whenever the app is redeployed or
-restarted, because the free tier has no permanent disk. Everyone just
-signs up again. If that gets annoying, the fix is swapping SQLite for a
-free hosted database — all database code lives in `src/db.js`.
+Step-by-step instructions are in [`docs/server-setup.html`](docs/server-setup.html) —
+open it in a browser. In short: install Node, PostgreSQL and Nginx, create
+the database, clone this repo, write `.env`, register the systemd service so
+it restarts itself, then point Nginx at port 3000 and add HTTPS with certbot.
+
+Two things that live outside the server: a domain name (about £10/year) for a
+proper web address, and backups — the nightly dump must be copied off the
+machine, or it dies with the machine.
+
+## Settings (`.env`)
+
+| Variable | What it does |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string. Required — the app won't start without it. |
+| `SESSION_SECRET` | Signs login cookies. Generate with `openssl rand -hex 32`. |
+| `PORT` | Port to listen on (default 3000). |
+| `REQUIRE_VERIFICATION` | Leave unset. Reserved for email/phone sign-up confirmation, which isn't wired to a provider yet. |
+
+Never commit `.env` — it holds real secrets and is already in `.gitignore`.
+
+## Updating a running server
+
+```bash
+ssh you@your-server
+cd ~/friendchat && git pull && npm install --omit=dev
+sudo systemctl restart friendschat
+```
 
 ## Forgot password?
 
-There's no reset flow on purpose (keeps things simple). Since history
-resets on redeploys anyway, the friend can simply sign up again with a
-new name — or with the same name after the next reset.
+There's no reset flow yet (keeps things simple). An admin with database
+access can set a new password, or the friend can sign up under a new name.

@@ -3,3 +3,5 @@ data.db
 data.db-*
 .omc/
 .DS_Store
+.env
+.dbpass

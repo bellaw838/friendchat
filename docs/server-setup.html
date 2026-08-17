@@ -254,11 +254,10 @@ DATABASE_URL=postgres://friendschat:your-long-random-password@localhost:5432/fri
 SESSION_SECRET=paste-a-long-random-string</code></pre>
 <p>Generate that secret with <code>openssl rand -hex 32</code>. It signs the login cookies, so
 if it leaks someone could forge logins. The <code>.env</code> file never goes into GitHub.</p>
-<div class="box warn">
-  <p><b>One prerequisite is not built yet.</b> The app still stores data in a SQLite file, so
-  <code>DATABASE_URL</code> does nothing until the Postgres rewrite is done — that is the
-  “Phase 1” work to ask Claude for. Everything else on this page works today, and the
-  rewrite changes only <code>src/db.js</code>.</p>
+<div class="box tip">
+  <p><b>This is live.</b> FriendsChat runs on PostgreSQL, so <code>DATABASE_URL</code> is
+  required — the app refuses to start without it, rather than silently falling back to a
+  file that would vanish. Accounts, chats and logins all survive restarts and reboots.</p>
 </div>
 
 <h2><span class="num">07</span>Keep it running forever</h2>
